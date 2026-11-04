@@ -256,21 +256,25 @@ export function saveNewIdea(newIdea: Idea): Idea {
   if (isSupabaseConfigured()) {
     try {
       const supabase = createClient();
-      supabase.from("ideas").insert({
-        title: newIdea.title,
-        slug: newIdea.slug,
-        hook: newIdea.hook,
-        problem_statement: newIdea.problem_statement,
-        mvp_features: newIdea.mvp_features,
-        category: newIdea.category,
-        difficulty: newIdea.difficulty,
-        target_region: newIdea.target_region,
-        collab_status: newIdea.collab_status,
-        suggested_stack: newIdea.suggested_stack,
-        parent_slug: newIdea.parent_slug,
-        is_seeded: false,
-      } as any).then(({ error }) => {
-        if (error) console.warn("Supabase insert idea error:", error.message);
+      supabase.auth.getUser().then(({ data }) => {
+        const authorId = data?.user?.id || null;
+        supabase.from("ideas").insert({
+          title: newIdea.title,
+          slug: newIdea.slug,
+          author_id: authorId,
+          hook: newIdea.hook,
+          problem_statement: newIdea.problem_statement,
+          mvp_features: newIdea.mvp_features,
+          category: newIdea.category,
+          difficulty: newIdea.difficulty,
+          target_region: newIdea.target_region,
+          collab_status: newIdea.collab_status,
+          suggested_stack: newIdea.suggested_stack,
+          parent_slug: newIdea.parent_slug,
+          is_seeded: false,
+        } as any).then(({ error }) => {
+          if (error) console.warn("Supabase insert idea error:", error.message);
+        });
       });
     } catch {
       // ignore
@@ -340,6 +344,26 @@ export async function toggleUpvote(
     }
   }
 
+  if (isSupabaseConfigured() && idea?.id) {
+    try {
+      const supabase = createClient();
+      (supabase as any).from("ideas").update({ upvotes_count: newCount }).eq("id", idea.id).then(({ error }: any) => {
+        if (error) console.warn("Supabase upvotes_count update error:", error.message);
+      });
+      supabase.auth.getUser().then(({ data }) => {
+        if (data?.user?.id && idea?.id) {
+          if (newStarred) {
+            (supabase as any).from("idea_upvotes").insert({ user_id: data.user.id, idea_id: idea.id }).then(() => {});
+          } else {
+            (supabase as any).from("idea_upvotes").delete().match({ user_id: data.user.id, idea_id: idea.id }).then(() => {});
+          }
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   return {
     starred: newStarred,
     upvotes_count: newCount,
@@ -378,6 +402,30 @@ export async function addFeatureRequest(
   };
 
   idea.feature_requests = [newPR, ...(idea.feature_requests || [])];
+
+  if (isSupabaseConfigured() && idea?.id) {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data }) => {
+        const userId = data?.user?.id;
+        if (userId && idea?.id) {
+          (supabase as any).from("feature_requests").insert({
+            idea_id: idea.id,
+            proposer_id: userId,
+            action_type: req.action_type,
+            feature_text: req.feature_text.trim(),
+            rationale: req.rationale?.trim() || null,
+            status: "pending",
+          }).then(({ error }: any) => {
+            if (error) console.warn("Supabase insert PR error:", error.message);
+          });
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   return newPR;
 }
 
@@ -406,6 +454,20 @@ export async function reviewFeatureRequest(
       idea.mvp_features = idea.mvp_features.filter(
         (f) => f.toLowerCase().trim() !== pr.feature_text.toLowerCase().trim()
       );
+    }
+  }
+
+  if (isSupabaseConfigured() && idea?.id) {
+    try {
+      const supabase = createClient();
+      if (/^[0-9a-fA-F-]{36}$/.test(prId)) {
+        (supabase as any).from("feature_requests").update({ status: decision }).eq("id", prId).then(() => {});
+      }
+      if (decision === "approved") {
+        (supabase as any).from("ideas").update({ mvp_features: idea.mvp_features }).eq("id", idea.id).then(() => {});
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -453,6 +515,30 @@ export async function addIdeaBuild(
 
   idea.builds = [newBuild, ...(idea.builds || [])];
   idea.builds_count = (idea.builds_count || 0) + 1;
+
+  if (isSupabaseConfigured() && idea?.id) {
+    try {
+      const supabase = createClient();
+      supabase.auth.getUser().then(({ data }) => {
+        const userId = data?.user?.id;
+        if (userId && idea?.id) {
+          (supabase as any).from("idea_builds").insert({
+            idea_id: idea.id,
+            builder_id: userId,
+            status: newBuild.status,
+            repo_url: newBuild.repo_url,
+            live_url: newBuild.live_url || null,
+            notes: newBuild.notes || null,
+          }).then(({ error }: any) => {
+            if (error) console.warn("Supabase insert build error:", error.message);
+          });
+        }
+      });
+      (supabase as any).from("ideas").update({ builds_count: idea.builds_count }).eq("id", idea.id).then(() => {});
+    } catch {
+      // ignore
+    }
+  }
 
   return {
     success: true,
@@ -710,8 +796,42 @@ export async function getAllAuthors(): Promise<IdeaAuthor[]> {
 export async function getUserProfile(username: string): Promise<UserProfileData | null> {
   const cleanUsername = decodeURIComponent(username).toLowerCase().replace(/^@/, "").trim();
 
-  // Find author in MOCK_AUTHORS or synthesized
-  let author = MOCK_AUTHORS.find(
+  // If Supabase is configured, check for live profile in Supabase
+  let dbAuthor: IdeaAuthor | null = null;
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      const { data } = await (supabase as any)
+        .from("profiles")
+        .select("*")
+        .eq("username", cleanUsername)
+        .maybeSingle();
+
+      const profileData = data as any;
+      if (profileData) {
+        dbAuthor = {
+          username: profileData.username,
+          full_name: profileData.full_name || profileData.username,
+          avatar_url: profileData.avatar_url || undefined,
+          bio: profileData.bio || undefined,
+          github_url: profileData.github_url || undefined,
+          twitter_url: profileData.twitter_url || undefined,
+          website_url: profileData.website_url || undefined,
+          location: profileData.location || "Global",
+          joined_date: profileData.created_at
+            ? new Date(profileData.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+            : "Recent Builder",
+          reputation_score: profileData.reputation_score || 300,
+          badges: profileData.badges || ["Ideator"],
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Find author in dbAuthor, MOCK_AUTHORS or synthesized
+  let author = dbAuthor || MOCK_AUTHORS.find(
     (a) => a.username.toLowerCase() === cleanUsername
   );
 

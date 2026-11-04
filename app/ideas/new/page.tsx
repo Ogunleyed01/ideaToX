@@ -18,8 +18,9 @@ import {
   Code2,
 } from "lucide-react";
 import { z } from "zod";
-import { Idea, IdeaCategory, IdeaDifficulty, CollabStatus } from "@/types/idea";
+import { Idea, IdeaAuthor, IdeaCategory, IdeaDifficulty, CollabStatus } from "@/types/idea";
 import { getIdeaBySlug, saveNewIdea } from "@/lib/ideas";
+import { getCurrentProfile } from "@/lib/supabase/client";
 
 const IdeaSubmissionSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(80, "Title is too long"),
@@ -207,6 +208,26 @@ function NewIdeaFormContent() {
         .replace(/^-+|-+$/g, "")
         .slice(0, 50) + `-${Math.random().toString(36).substring(2, 6)}`;
 
+    let authorInfo: IdeaAuthor = {
+      username: "you_founder",
+      full_name: "Technical Author",
+      reputation_score: 150,
+    };
+
+    try {
+      const liveProfile = await getCurrentProfile();
+      if (liveProfile) {
+        authorInfo = {
+          username: liveProfile.username,
+          full_name: liveProfile.full_name || liveProfile.username,
+          avatar_url: liveProfile.avatar_url || undefined,
+          reputation_score: liveProfile.reputation_score || 300,
+        };
+      }
+    } catch {
+      // fallback
+    }
+
     const newIdeaObj: Idea = {
       ...payload,
       slug: generatedSlug,
@@ -216,11 +237,7 @@ function NewIdeaFormContent() {
       builds_count: 0,
       is_seeded: false,
       created_at: new Date().toISOString(),
-      author: {
-        username: "you_founder",
-        full_name: "Technical Author",
-        reputation_score: 150,
-      },
+      author: authorInfo,
       feature_requests: [],
       builds: [],
     };

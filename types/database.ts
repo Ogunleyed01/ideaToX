@@ -235,5 +235,24 @@ export interface Database {
         };
       };
     };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
   };
 }
+
+export type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+export type IdeaRow = Database["public"]["Tables"]["ideas"]["Row"];
+export type FeatureRequestRow = Database["public"]["Tables"]["feature_requests"]["Row"];
+export type IdeaBuildRow = Database["public"]["Tables"]["idea_builds"]["Row"];
+export type IdeaUpvoteRow = Database["public"]["Tables"]["idea_upvotes"]["Row"];
+export type CommentRow = Database["public"]["Tables"]["comments"]["Row"];

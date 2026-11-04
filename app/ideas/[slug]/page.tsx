@@ -51,6 +51,7 @@ import {
 import { Idea, IdeaDifficulty, FeatureRequest, IdeaBuild, IdeaComment } from "@/types/idea";
 import { ForkModal } from "@/components/fork-modal";
 import { LineageTree } from "@/components/lineage-tree";
+import { getCurrentProfile } from "@/lib/supabase/client";
 
 const DIFFICULTY_CONFIG: Record<
   IdeaDifficulty,
@@ -253,10 +254,28 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     e.preventDefault();
     if (!prFeatureText.trim()) return;
 
+    let proposer = undefined;
+    try {
+      const profile = await getCurrentProfile();
+      if (profile) {
+        const p = profile as any;
+        proposer = {
+          username: p.username,
+          full_name: p.full_name || p.username,
+          avatar_url: p.avatar_url || undefined,
+          reputation_score: p.reputation_score || 300,
+          badges: p.badges || ["Ideator"],
+        };
+      }
+    } catch {
+      // fallback
+    }
+
     const newPR = await addFeatureRequest(idea.slug, {
       action_type: prActionType,
       feature_text: prFeatureText.trim(),
       rationale: prRationale.trim(),
+      proposer,
     });
 
     if (newPR) {
@@ -285,11 +304,29 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     e.preventDefault();
     if (!repoUrl.trim()) return;
 
+    let builder = undefined;
+    try {
+      const profile = await getCurrentProfile();
+      if (profile) {
+        const p = profile as any;
+        builder = {
+          username: p.username,
+          full_name: p.full_name || p.username,
+          avatar_url: p.avatar_url || undefined,
+          reputation_score: p.reputation_score || 300,
+          badges: p.badges || ["Shipper"],
+        };
+      }
+    } catch {
+      // fallback
+    }
+
     const res = await addIdeaBuild(idea.slug, {
       repo_url: repoUrl.trim(),
       live_url: liveUrl.trim() || undefined,
       status: buildStatus,
       notes: buildNotes.trim() || "Active implementation linked via IdeaToX Showcase.",
+      builder,
     });
 
     if (res.success && res.build) {
@@ -312,7 +349,24 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
 
     setIsSubmittingComment(true);
     try {
-      const created = await addIdeaComment(idea.slug, text, parentId);
+      let authorUser = undefined;
+      try {
+        const profile = await getCurrentProfile();
+        if (profile) {
+          const p = profile as any;
+          authorUser = {
+            username: p.username,
+            full_name: p.full_name || p.username,
+            avatar_url: p.avatar_url || undefined,
+            reputation_score: p.reputation_score || 300,
+            badges: p.badges || ["Ideator"],
+          };
+        }
+      } catch {
+        // fallback
+      }
+
+      const created = await addIdeaComment(idea.slug, text, parentId, authorUser);
       if (created) {
         setComments((prev) => [...prev, created]);
         if (parentId) {
