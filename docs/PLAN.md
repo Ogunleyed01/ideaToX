@@ -2,17 +2,17 @@
 
 > **Instructions for AI Coding Agent:** Execute these phases sequentially. Do not move to the next milestone until the current milestone builds cleanly with zero TypeScript errors.
 
-## Milestone 1: Project Scaffolding & Database Setup
-- [ ] **Task 1.1:** Initialize Next.js 15 App Router project with TypeScript and Tailwind CSS.
-- [ ] **Task 1.2:** Install `shadcn/ui` core primitives (`button`, `card`, `badge`, `dialog`, `input`, `textarea`, `select`, `tabs`, `dropdown-menu`, `avatar`).
-- [ ] **Task 1.3:** Set up Supabase client packages (`@supabase/ssr`, `@supabase/supabase-js`) and configure `.env.local` template.
-- [ ] **Task 1.4:** Run the SQL migration from `SYSTEM_DESIGN.md` to create all 6 tables, indexes, and RLS policies.
-- [ ] **Task 1.5:** Implement GitHub and Google OAuth sign-in flow and automatic `public.profiles` row creation via Supabase database trigger.
+## Milestone 1: Project Scaffolding & Database Setup (Completed)
+- [x] **Task 1.1:** Initialize Next.js 16 App Router project with TypeScript and Tailwind CSS.
+- [x] **Task 1.2:** Install UI primitives with custom editorial tokens and anti-slop guidelines.
+- [x] **Task 1.3:** Set up Supabase client packages (`@supabase/ssr`, `@supabase/supabase-js`) and configure `.env.local` template.
+- [x] **Task 1.4:** Generate full SQL migration (`supabase/migrations/20261104000000_init_schema.sql`) for all 6 tables, triggers, indexes, and RLS policies.
+- [x] **Task 1.5:** Implement GitHub and Google OAuth sign-in flow (`components/auth-modal.tsx`), callback route (`app/auth/callback/route.ts`), and automatic profile creation trigger.
 
-## Milestone 2: The Seed Engine & Discovery Feed (Read Path)
-- [ ] **Task 2.1:** Create `/scripts/seed-ideas.json` containing 50+ high-quality, structured software/hardware project ideas across Beginner, Intermediate, and Advanced tiers.
-- [ ] **Task 2.2:** Write a seed script (`npm run db:seed`) to populate `public.ideas` so the local environment has rich data immediately.
-- [ ] **Task 2.3:** Build the Main Feed UI (`app/page.tsx`):
+## Milestone 2: The Seed Engine & Discovery Feed (Read Path) (Completed)
+- [x] **Task 2.1:** Create `/data/seed-ideas.json` containing 50+ high-quality, structured software/hardware project ideas across Beginner, Intermediate, and Advanced tiers.
+- [x] **Task 2.2:** Write a seed script (`npm run db:seed`) to populate `public.ideas`, `public.profiles`, `feature_requests`, `builds`, and `comments`.
+- [x] **Task 2.3:** Build the Main Feed UI (`app/page.tsx`):
   - Responsive Bento Grid of `IdeaCard` components.
   - Multi-filter bar (Category, Difficulty, Target Region, Collab Status, Sort by Upvotes/Newest).
   - Debounced search bar querying title, hook, and tags.

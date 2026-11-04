@@ -1,5 +1,6 @@
 import seedIdeasRaw from "@/data/seed-ideas.json";
 import { Idea, IdeaAuthor, FeatureRequest, IdeaBuild, IdeaComment, UserProfileData } from "@/types/idea";
+import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 
 export const MOCK_AUTHORS: IdeaAuthor[] = [
   {
@@ -160,11 +161,74 @@ let memoryIdeas: Idea[] = (seedIdeasRaw as Idea[]).map((raw, idx) => {
 });
 
 export async function getAllIdeas(): Promise<Idea[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("ideas")
+        .select(`
+          *,
+          author:profiles(*)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data.map((d: any) => ({
+          ...d,
+          mvp_features: Array.isArray(d.mvp_features) ? d.mvp_features : JSON.parse(d.mvp_features || "[]"),
+          author: d.author || MOCK_AUTHORS[0],
+        }));
+      }
+    } catch (err) {
+      console.warn("Supabase fetch failed, falling back to local memory:", err);
+    }
+  }
   return memoryIdeas;
 }
 
 export async function getIdeaBySlug(slug: string): Promise<Idea | null> {
   const normalized = decodeURIComponent(slug).toLowerCase().trim();
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("ideas")
+        .select(`
+          *,
+          author:profiles(*),
+          feature_requests(*, proposer:profiles(*)),
+          idea_builds(*, builder:profiles(*)),
+          comments(*, user:profiles(*))
+        `)
+        .eq("slug", normalized)
+        .maybeSingle();
+
+      if (!error && data) {
+        const row = data as any;
+        return {
+          ...row,
+          mvp_features: Array.isArray(row.mvp_features) ? row.mvp_features : JSON.parse(row.mvp_features || "[]"),
+          author: row.author || MOCK_AUTHORS[0],
+          feature_requests: (row.feature_requests || []).map((pr: any) => ({
+            ...pr,
+            proposer: pr.proposer || MOCK_AUTHORS[0],
+          })),
+          builds: (row.idea_builds || []).map((b: any) => ({
+            ...b,
+            builder: b.builder || MOCK_AUTHORS[0],
+          })),
+          comments: (row.comments || []).map((c: any) => ({
+            ...c,
+            user: c.user || MOCK_AUTHORS[0],
+          })),
+        };
+      }
+    } catch (err) {
+      console.warn("Supabase getIdeaBySlug failed, falling back to local memory:", err);
+    }
+  }
+
   const found = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
   return found || null;
 }
@@ -187,6 +251,32 @@ export function saveNewIdea(newIdea: Idea): Idea {
   }
 
   memoryIdeas = [newIdea, ...memoryIdeas];
+
+  // If Supabase is configured, sync to Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      supabase.from("ideas").insert({
+        title: newIdea.title,
+        slug: newIdea.slug,
+        hook: newIdea.hook,
+        problem_statement: newIdea.problem_statement,
+        mvp_features: newIdea.mvp_features,
+        category: newIdea.category,
+        difficulty: newIdea.difficulty,
+        target_region: newIdea.target_region,
+        collab_status: newIdea.collab_status,
+        suggested_stack: newIdea.suggested_stack,
+        parent_slug: newIdea.parent_slug,
+        is_seeded: false,
+      } as any).then(({ error }) => {
+        if (error) console.warn("Supabase insert idea error:", error.message);
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   return newIdea;
 }
 
@@ -567,6 +657,24 @@ export async function addIdeaComment(
   };
 
   idea.comments = [...(idea.comments || []), newComment];
+
+  if (isSupabaseConfigured() && idea.id) {
+    try {
+      const supabase = createClient();
+      supabase.from("comments").insert({
+        idea_id: idea.id,
+        user_id: newComment.user.username,
+        content: newComment.content,
+        parent_comment_id: parentCommentId || null,
+        likes_count: 0,
+      } as any).then(({ error }) => {
+        if (error) console.warn("Supabase insert comment error:", error.message);
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   return newComment;
 }
 
