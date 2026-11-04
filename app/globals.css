@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #d0bcff;
+  --color-on-primary: #3c0091;
+  --color-primary-container: #a078ff;
+  --color-on-primary-container: #340080;
+  --color-primary-fixed: #e9ddff;
+  --color-primary-fixed-dim: #d0bcff;
+  --color-on-primary-fixed: #23005c;
+  --color-on-primary-fixed-variant: #5516be;
+  --color-inverse-primary: #6d3bd7;
+
+  --color-secondary: #4edea3;
+  --color-on-secondary: #003824;
+  --color-secondary-container: #00a572;
+  --color-on-secondary-container: #00311f;
+  --color-secondary-fixed: #6ffbbe;
+  --color-secondary-fixed-dim: #4edea3;
+  --color-on-secondary-fixed: #002113;
+  --color-on-secondary-fixed-variant: #005236;
+
+  --color-tertiary: #c0c1ff;
+  --color-on-tertiary: #1000a9;
+  --color-tertiary-container: #8083ff;
+  --color-on-tertiary-container: #0d0096;
+  --color-tertiary-fixed: #e1e0ff;
+  --color-tertiary-fixed-dim: #c0c1ff;
+  --color-on-tertiary-fixed: #07006c;
+  --color-on-tertiary-fixed-variant: #2f2ebe;
+
+  --color-canvas: #FAF9F6;
+  --color-ink-primary: #111113;
+  --color-ink-secondary: #52525B;
+  --color-ink-ghost: #C4C4C8;
+  --color-obsidian: #0D0E12;
+
+  --color-background: #FAF9F6;
+  --color-on-background: #111113;
+
+  --color-surface: #ffffff;
+  --color-on-surface: #111113;
+  --color-surface-dim: #f4f3f0;
+  --color-surface-bright: #ffffff;
+  --color-surface-variant: #ebeae6;
+  --color-on-surface-variant: #52525B;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f8f7f4;
+  --color-surface-container: #f2f1ed;
+  --color-surface-container-high: #e8e7e2;
+  --color-surface-container-highest: #deddd7;
+  --color-surface-tint: #111113;
+
+  --color-inverse-surface: #111113;
+  --color-inverse-on-surface: #FAF9F6;
+
+  --color-outline: #A1A1AA;
+  --color-outline-variant: #E4E4E7;
+
+  --color-error: #ef4444;
+  --color-on-error: #ffffff;
+  --color-error-container: #fee2e2;
+  --color-on-error-container: #991b1b;
+
+  --spacing-gutter: 1.5rem;
+  --spacing-space-xl: 2.5rem;
+  --spacing-gutter-lg: 2rem;
+  --spacing-margin-mobile: 1rem;
+  --spacing-margin-desktop: 3rem;
+  --spacing-space-lg: 1.5rem;
+  --spacing-space-xs: 0.25rem;
+  --spacing-gutter-sm: 1rem;
+  --spacing-margin: 2rem;
+  --spacing-space-md: 1rem;
+  --spacing-space-sm: 0.5rem;
+
+  --font-serif: var(--font-serif), Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-display-hero: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-headline-lg: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-headline-md: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-headline-sm: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-display-hero-mobile: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-headline-lg-mobile: var(--font-geist-sans), "Geist", system-ui, sans-serif;
+  --font-body-lg: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-body-md: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-body-sm: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-label-system: var(--font-inter), "Inter", system-ui, sans-serif;
+  --font-label-code-lg: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  --font-label-code-sm: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+
+/* Clean plain canvas background */
+.bg-dot-matrix {
+  background-color: #FAF9F6;
+}
+
+/* Dual Pastel Auroras */
+.aurora-lavender {
+  background: radial-gradient(circle, rgba(165,180,252,0.42) 0%, rgba(196,181,253,0.18) 45%, transparent 70%);
+}
+
+.aurora-amber {
+  background: radial-gradient(circle, rgba(253,224,71,0.40) 0%, rgba(251,191,36,0.16) 45%, transparent 70%);
+}
+
+/* Bento card styles defined by UI_SKILL */
+.bento-white {
+  border-radius: 28px;
+  background-color: #ffffff;
+  border: 1px solid rgba(228, 228, 231, 0.85);
+  box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.06);
+}
+
+.console-obsidian {
+  border-radius: 22px;
+  background-color: #0D0E12;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@utility text-display-hero {
+  font-size: 64px;
+  line-height: 72px;
+  letter-spacing: -0.04em;
+  font-weight: 600;
+}
+
+@utility text-display-hero-mobile {
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
+@utility text-headline-lg {
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+
+@utility text-headline-lg-mobile {
+  font-size: 28px;
+  line-height: 36px;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+
+@utility text-headline-md {
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: -0.02em;
+  font-weight: 500;
+}
+
+@utility text-headline-sm {
+  font-size: 18px;
+  line-height: 26px;
+  letter-spacing: -0.015em;
+  font-weight: 500;
+}
+
+@utility text-body-lg {
+  font-size: 16px;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+}
+
+@utility text-body-md {
+  font-size: 14px;
+  line-height: 22px;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+@utility text-body-sm {
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: 0em;
+  font-weight: 400;
+}
+
+@utility text-label-code-lg {
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+
+@utility text-label-code-sm {
+  font-size: 11px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
+
+@utility text-label-system {
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background-color: #FAF9F6;
+    color: #111113;
+  }
+
+  body {
+    background-color: #FAF9F6;
+    color: #111113;
+    overscroll-behavior: none;
+  }
+
+  main > :first-child {
+    margin-top: 0 !important;
+  }
+
+  main > :last-child {
+    margin-bottom: 0 !important;
+  }
+}
+
+::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

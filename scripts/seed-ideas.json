@@ -1,0 +1,902 @@
+[
+  {
+    "title": "PaySplit Escrow for Local Vendors",
+    "slug": "paysplit-escrow-local-vendors",
+    "hook": "Milestone-based micro-escrow web app for Instagram and WhatsApp social commerce vendors.",
+    "problem_statement": "Buyers in emerging markets fear paying upfront to social media vendors due to scam risks, while vendors fear pay-on-delivery cancellations.",
+    "mvp_features": [
+      "One-click payment link generator with delivery milestone lock",
+      "WhatsApp webhook notifications for order status updates",
+      "4-digit buyer release PIN upon physical package inspection",
+      "Automated dispute timer with photo evidence upload"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "Supabase", "Paystack API", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "GitCommit Storyteller CLI",
+    "slug": "gitcommit-storyteller-cli",
+    "hook": "CLI tool that turns your week of messy git commits into a polished changelog or standup update.",
+    "problem_statement": "Developers forget what they worked on by Friday and hate writing weekly status reports or release notes manually.",
+    "mvp_features": [
+      "Local git log parser filtering by author and date range",
+      "Diff analyzer that summarizes code changes into plain English",
+      "Output templates for Slack standups, Markdown changelogs, and X threads",
+      "Zero-config offline mode using local Ollama or Gemini API key"
+    ],
+    "category": "cli",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Node.js", "TypeScript", "Commander.js", "Gemini API"],
+    "is_seeded": true
+  },
+  {
+    "title": "SolarGrid Neighbor Share",
+    "slug": "solargrid-neighbor-share",
+    "hook": "IoT monitoring dashboard for sharing excess home inverter/solar battery capacity with next-door neighbors.",
+    "problem_statement": "Households with solar installations often waste peak daytime generation while neighbors run expensive fuel generators.",
+    "mvp_features": [
+      "ESP32 smart meter telemetry ingestion via MQTT",
+      "Real-time kWh consumption tracker per connected neighbor",
+      "Prepaid token generation for power allocation limits",
+      "Low-battery automatic cutoff relay trigger"
+    ],
+    "category": "hardware",
+    "difficulty": "advanced",
+    "target_region": "Nigeria",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["ESP32", "C++", "MQTT", "Next.js", "InfluxDB"],
+    "is_seeded": true
+  },
+  {
+    "title": "TabDetox Context Bundler",
+    "slug": "tabdetox-context-bundler",
+    "hook": "Browser extension that groups 50+ open tabs by task context and hibernates them into searchable workspaces.",
+    "problem_statement": "Developers and researchers keep dozens of tabs open across multiple projects, draining RAM and losing focus.",
+    "mvp_features": [
+      "1-click snapshot of all active window tabs into a named workspace",
+      "Auto-grouping of tabs by domain and page title similarity",
+      "Command+K spotlight search across closed/hibernated tab histories",
+      "Markdown export of workspace links for sharing with teammates"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Plasmo", "React", "Chrome Storage API"],
+    "is_seeded": true
+  },
+  {
+    "title": "AudioContract Redflag Scanner",
+    "slug": "audiocontract-redflag-scanner",
+    "hook": "AI tool for freelancers and creators that scans PDF contracts for predatory IP and payment clauses.",
+    "problem_statement": "Independent developers and designers sign client contracts without realizing they contain unlimited liability or IP traps.",
+    "mvp_features": [
+      "PDF/DOCX drag-and-drop parser with clause chunking",
+      "Severity highlighter (Red = Danger, Yellow = Negotiate, Green = Standard)",
+      "Auto-generated polite counter-email wording for risky clauses",
+      "Side-by-side comparison with standard open-source freelance templates"
+    ],
+    "category": "ai",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Gemini API", "PDF.js", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "OfflineFirst Clinic Queue & Triage",
+    "slug": "offlinefirst-clinic-queue-triage",
+    "hook": "PWA for rural and suburban clinics to manage patient queues and vitals during internet outages.",
+    "problem_statement": "Community clinics rely on paper folders that get lost, yet cloud-only hospital software fails whenever connectivity drops.",
+    "mvp_features": [
+      "IndexedDB local storage with automatic background sync when online",
+      "SMS ticket number dispatch to waiting patients",
+      "Fast vital-signs intake form optimized for cheap Android tablets",
+      "Doctor queue dashboard sorted by triage urgency"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Africa",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["React", "Dexie.js", "Supabase", "Twilio/Termii SMS"],
+    "is_seeded": true
+  },
+  {
+    "title": "EnvGuard Secret Sync CLI",
+    "slug": "envguard-secret-sync-cli",
+    "hook": "Zero-knowledge CLI to sync .env files across team machines using GitHub SSH keys.",
+    "problem_statement": "Teams still paste sensitive API keys over Slack or Discord when onboarding a new developer to a repository.",
+    "mvp_features": [
+      "Encrypts local .env using teammate's public GitHub SSH keys",
+      "Validates missing keys against .env.example before running dev server",
+      "Single command `envguard pull` to decrypt into local directory",
+      "Audit log of when environment variables were added or rotated"
+    ],
+    "category": "cli",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Go", "Cobra", "Age Encryption", "GitHub API"],
+    "is_seeded": true
+  },
+  {
+    "title": "PricePulse Grocery Inflation Tracker",
+    "slug": "pricepulse-grocery-inflation-tracker",
+    "hook": "Crowdsourced mobile app tracking real-time staple food prices across local open-air markets.",
+    "problem_statement": "Official inflation metrics lag behind reality, and households don't know which nearby market currently has fair prices for staples.",
+    "mvp_features": [
+      "Geo-tagged price submission with receipt or stall photo verification",
+      "Historical price chart per commodity (rice, beans, cooking gas, bread)",
+      "Cheapest nearby market basket calculator",
+      "Reputation badges for verified daily price contributors"
+    ],
+    "category": "mobile",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "open",
+    "suggested_stack": ["Flutter", "Supabase", "PostGIS", "Chart.js"],
+    "is_seeded": true
+  },
+  {
+    "title": "PR-Timezones Overlap Visualizer",
+    "slug": "pr-timezones-overlap-visualizer",
+    "hook": "GitHub Chrome extension that shows a contributor's local time and working hours right on their Pull Request.",
+    "problem_statement": "Remote open-source maintainers ping contributors expecting immediate replies without realizing it is 3 AM in their timezone.",
+    "mvp_features": [
+      "Injects subtle local time badge next to GitHub usernames on PRs and Issues",
+      "Infers timezone from public commit timestamp history or profile location",
+      "Suggests optimal review window overlap between author and reviewer",
+      "Zero external database required—runs purely client-side"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["JavaScript", "Manifest V3", "GitHub REST API"],
+    "is_seeded": true
+  },
+  {
+    "title": "ColdChain Vaccine Cooler Tracker",
+    "slug": "coldchain-vaccine-cooler-tracker",
+    "hook": "Low-cost GSM temperature and lid-open logger for medical transport coolers.",
+    "problem_statement": "Vaccines and insulin spoil during last-mile transit when ice packs melt unnoticed.",
+    "mvp_features": [
+      "DS18B20 temperature sensor + photoresistor lid-open detection",
+      "SIM800L GSM SMS alert when threshold exceeds 8°C for 10 minutes",
+      "Offline SD card CSV logging for regulatory compliance",
+      "Web viewer to upload CSV and verify cold-chain integrity"
+    ],
+    "category": "hardware",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Arduino", "ESP32", "SIM800L", "Next.js"],
+    "is_seeded": true
+  },
+  {
+    "title": "RegexPlayground with Visual AST",
+    "slug": "regexplayground-visual-ast",
+    "hook": "Interactive regular expression builder that converts plain English into visual railroad diagrams.",
+    "problem_statement": "Complex regular expressions are unreadable to 90% of developers and break silently on edge cases.",
+    "mvp_features": [
+      "Natural language to Regex generator with automatic edge-case unit tests",
+      "Visual node-graph showing how each capture group matches string tokens",
+      "One-click copy as JavaScript, Python, Rust, or Go validation snippet",
+      "Community library of battle-tested patterns (phone numbers, slugs, IBAN)"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "React Flow", "TypeScript", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "GhostJob Detector Extension",
+    "slug": "ghostjob-detector-extension",
+    "hook": "Browser extension that flags stale or fake job listings on LinkedIn and job boards.",
+    "problem_statement": "Job seekers waste hours tailoring resumes for 'ghost jobs' that have been reposted automatically for 6+ months.",
+    "mvp_features": [
+      "Tracks first-seen date of job URLs across community crawls",
+      "Cross-references company career page to verify if role actually exists",
+      "Displays 'Reposted 4x' warning badge directly on job cards",
+      "Crowdsourced 'Received Response / Ghosted' ratio per employer"
+    ],
+    "category": "extension",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Plasmo", "React", "Supabase", "TypeScript"],
+    "is_seeded": true
+  },
+  {
+    "title": "CampusShuttle Live Crowd Ping",
+    "slug": "campusshuttle-live-crowd-ping",
+    "hook": "Waze-like mobile app for university students to see real-time campus shuttle locations and bus stop queue lengths.",
+    "problem_statement": "Students stand at sun-baked campus bus stops for 45 minutes with zero visibility into whether a shuttle is coming or already full.",
+    "mvp_features": [
+      "Passive GPS location sharing when a student boards a shuttle",
+      "1-tap bus stop crowd status ('Empty', 'Moderate Queue', 'Packed')",
+      "Estimated arrival countdown based on historical campus traffic loops",
+      "Low-data mode under 500KB per session"
+    ],
+    "category": "mobile",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "open",
+    "suggested_stack": ["React Native", "Expo", "Supabase Realtime", "Mapbox"],
+    "is_seeded": true
+  },
+  {
+    "title": "Voice-to-SQL Analytics Buddy",
+    "slug": "voice-to-sql-analytics-buddy",
+    "hook": "Read-only Postgres dashboard where non-technical founders ask revenue questions by voice and get instant charts.",
+    "problem_statement": "Startup engineers constantly get interrupted by PMs and founders asking for simple CSV exports and SQL counts.",
+    "mvp_features": [
+      "Introspects Postgres schema (table names and column types only, never raw rows)",
+      "Converts spoken or typed question into safe read-only SELECT query",
+      "Auto-renders result as Bar, Line, or KPI metric card",
+      "1-click pin to a shared morning metrics dashboard"
+    ],
+    "category": "ai",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "PostgreSQL", "Gemini API", "Recharts"],
+    "is_seeded": true
+  },
+  {
+    "title": "DeadLink Hunter GitHub Action",
+    "slug": "deadlink-hunter-github-action",
+    "hook": "CLI and GitHub Action that scans documentation repos for broken external links and suggests Wayback Machine replacements.",
+    "problem_statement": "Open-source documentation rots quickly as external tutorials and API references change URLs or 404.",
+    "mvp_features": [
+      "Concurrent async URL status checker for Markdown and MDX files",
+      "Queries Internet Archive API when a 404 link is detected",
+      "Automatically opens a clean Pull Request fixing dead links",
+      "Configurable ignore list for localhost and auth-gated domains"
+    ],
+    "category": "cli",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Rust", "Tokio", "GitHub Actions", "Reqwest"],
+    "is_seeded": true
+  },
+  {
+    "title": "CoopSave Rotating Thrift Manager",
+    "slug": "coopsave-rotating-thrift-manager",
+    "hook": "Transparent ledger web app for Ajo/Esusu/Chit-fund rotating savings groups among friends and coworkers.",
+    "problem_statement": "Traditional rotating savings circles rely on WhatsApp chats and Excel sheets, causing disputes over late contributions and payout order.",
+    "mvp_features": [
+      "Automated payout calendar and randomized slot drawing",
+      "Payment proof upload or webhook verification per cycle",
+      "Group trust score that unlocks higher contribution tiers",
+      "Exportable PDF cycle statements for all members"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "Supabase", "Tailwind CSS", "Resend"],
+    "is_seeded": true
+  },
+  {
+    "title": "MockWebhook Chaos Proxy",
+    "slug": "mockwebhook-chaos-proxy",
+    "hook": "Developer tool to simulate delayed, duplicate, or out-of-order Stripe/Paystack webhooks locally.",
+    "problem_statement": "Developers test payment webhooks only on the happy path, leading to double-crediting bugs when webhooks fire twice in production.",
+    "mvp_features": [
+      "Local CLI tunnel that intercepts incoming webhook payloads",
+      "Chaos toggle: inject 5-second jitter, duplicate delivery, or 500 retry loops",
+      "Payload inspector UI with 1-click replay to localhost",
+      "Pre-built templates for Stripe, Paystack, GitHub, and Shopify events"
+    ],
+    "category": "cli",
+    "difficulty": "advanced",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Go", "WebSockets", "React", "SQLite"],
+    "is_seeded": true
+  },
+  {
+    "title": "Podcast Chapter & Quote Clipper",
+    "slug": "podcast-chapter-quote-clipper",
+    "hook": "Web tool that takes a YouTube or podcast RSS link and generates timestamped chapters and audiogram cards.",
+    "problem_statement": "Indie podcasters spend hours re-listening to episodes just to write YouTube timestamps and find 30-second viral clips.",
+    "mvp_features": [
+      "Transcript ingestion with topic-shift detection for YouTube timestamps",
+      "Highlights top 5 most quotable 45-second moments",
+      "Browser-based Canvas waveform video renderer for TikTok/Reels",
+      "One-click copy of formatted show notes with guest links"
+    ],
+    "category": "ai",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "FFmpeg.wasm", "Gemini API", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "WaterTank Ultrasonic Level Alert",
+    "slug": "watertank-ultrasonic-level-alert",
+    "hook": "Smart overhead water tank sensor that stops the borehole pump automatically before overflow.",
+    "problem_statement": "Homes and apartments waste thousands of liters of water and burn pump coils because nobody notices when the overhead tank is full.",
+    "mvp_features": [
+      "Waterproof JSN-SR04T ultrasonic distance sensor mounted inside tank lid",
+      "ESP8266 controller with relay module to cut pump power at 95% capacity",
+      "Local Wi-Fi PWA showing water percentage and daily usage trends",
+      "Dry-run protection if borehole water flow stops while pump is active"
+    ],
+    "category": "hardware",
+    "difficulty": "beginner",
+    "target_region": "Nigeria",
+    "collab_status": "open",
+    "suggested_stack": ["ESP8266", "C++", "HTML/CSS Embedded", "MQTT"],
+    "is_seeded": true
+  },
+  {
+    "title": "DesignToken Diff Chrome Extension",
+    "slug": "designtoken-diff-chrome-extension",
+    "hook": "Inspect any live website and extract its exact color palette, typography scale, and spacing tokens into Tailwind config.",
+    "problem_statement": "Frontend developers waste time digging through Computed Styles in DevTools to understand how a great website structured its design system.",
+    "mvp_features": [
+      "Scans DOM styles and clusters colors, fonts, and border-radii",
+      "Generates ready-to-paste `tailwind.config.ts` or CSS variables",
+      "Contrast checker highlighting accessibility failures on the live page",
+      "Export palette directly to Figma SVG swatches"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Vite", "Chrome Extension API", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "TenantVerify Maintenance Log",
+    "slug": "tenantverify-maintenance-log",
+    "hook": "Immutable move-in/move-out photo timestamp ledger to prevent unfair security deposit deductions.",
+    "problem_statement": "Tenants frequently lose their caution/security deposits over pre-existing apartment damage they cannot prove existed before move-in.",
+    "mvp_features": [
+      "Guided room-by-room move-in photo checklist with cryptographic timestamp",
+      "Dual-signature PDF inspection report emailed to landlord and tenant",
+      "Repair ticket tracker logging response time for plumbing/electrical issues",
+      "Side-by-side move-in vs move-out photo comparison slider"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Supabase Storage", "jsPDF", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "LocalLLM Hardware Benchmark Matcher",
+    "slug": "localllm-hardware-benchmark-matcher",
+    "hook": "Web calculator and CLI that detects your GPU/RAM and tells you exactly which quantized open-source LLMs will run smoothly.",
+    "problem_statement": "Developers download 15GB HuggingFace model weights only to discover their laptop VRAM cannot run them above 1 token per second.",
+    "mvp_features": [
+      "VRAM and memory bandwidth calculator for GGUF quantization levels (Q4, Q5, Q8)",
+      "Estimated tokens-per-second lookup table by Apple Silicon / NVIDIA GPU model",
+      "1-click copy of optimal Ollama or llama.cpp launch command",
+      "Community benchmark submission CLI"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "TypeScript", "Shadcn UI", "JSON Dataset"],
+    "is_seeded": true
+  },
+  {
+    "title": "AgriDisease Leaf Scanner Offline",
+    "slug": "agridisease-leaf-scanner-offline",
+    "hook": "On-device TensorFlow Lite mobile app that identifies cassava, maize, and tomato crop diseases without internet.",
+    "problem_statement": "Rural smallholder farmers lose up to 40% of yields to treatable fungal and viral blights because extension workers are scarce.",
+    "mvp_features": [
+      "Quantized mobile vision model running 100% offline on budget Android phones",
+      "Instant diagnosis with localized treatment instructions in English, Yoruba, Hausa, and Swahili",
+      "Heat-map sync of outbreak clusters when the phone regains connectivity",
+      "Voice readout for low-literacy farmers"
+    ],
+    "category": "mobile",
+    "difficulty": "advanced",
+    "target_region": "Africa",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Flutter", "TensorFlow Lite", "SQLite", "Supabase"],
+    "is_seeded": true
+  },
+  {
+    "title": "DependencyBloat PR Gatekeeper",
+    "slug": "dependencybloat-pr-gatekeeper",
+    "hook": "GitHub bot that comments on PRs showing exact bundle size impact and lighter alternatives whenever `package.json` changes.",
+    "problem_statement": "Frontend repositories slowly balloon to megabytes of JavaScript because developers install heavy libraries for trivial utilities.",
+    "mvp_features": [
+      "Detects added npm packages in Pull Request diffs",
+      "Queries Bundlephobia API to calculate gzipped size increase",
+      "Suggests native JS or micro-library replacements (e.g., date-fns vs moment)",
+      "Fails CI check if bundle budget increases by more than a set threshold"
+    ],
+    "category": "cli",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Probot", "GitHub Actions", "Node.js"],
+    "is_seeded": true
+  },
+  {
+    "title": "MicroSaaS Churn Exit-Interview Bot",
+    "slug": "microsaas-churn-exit-interview-bot",
+    "hook": "Embeddable cancellation flow widget that dynamically negotiates pauses or discounts before a user cancels their subscription.",
+    "problem_statement": "Indie SaaS founders lose recurring revenue without knowing why users cancel or offering a temporary pause option.",
+    "mvp_features": [
+      "Drop-in `<script>` or React modal triggered on 'Cancel Subscription' click",
+      "Dynamic branching offer (Too expensive -> 30% off for 2 months; Not using right now -> Pause for 60 days)",
+      "Direct Stripe/LemonSqueezy API integration to apply discounts automatically",
+      "Weekly digest of top cancellation reasons"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Stripe API", "Tailwind CSS", "PostgreSQL"],
+    "is_seeded": true
+  },
+  {
+    "title": "StudyPact Focus Room with Stakes",
+    "slug": "studypact-focus-room-with-stakes",
+    "hook": "Multiplayer Pomodoro study room where your camera stays off, but leaving early forfeits streak points to your squad.",
+    "problem_statement": "Solo remote workers and students procrastinate easily when studying alone at home.",
+    "mvp_features": [
+      "Synchronized 50/10 Pomodoro timer rooms grouped by topic (Coding, Med School, Design)",
+      "Session goal declaration at the start of every 50-minute block",
+      "Peer accountability check-in during the 10-minute break",
+      "Ambient lo-fi audio mixer (rain, coffee shop, mechanical keyboard)"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Supabase Realtime", "Web Audio API", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "OpenAPI to TypeScript Mock Server",
+    "slug": "openapi-typescript-mock-server",
+    "hook": "CLI that spins up a realistic stateful local REST API from any Swagger/OpenAPI YAML file in 2 seconds.",
+    "problem_statement": "Frontend engineers are blocked waiting for backend teams to finish endpoints before they can build and test UI flows.",
+    "mvp_features": [
+      "Parses OpenAPI 3.0 specs and generates realistic Faker.js responses",
+      "In-memory stateful CRUD so POST requests actually persist during the session",
+      "Configurable latency and error rate flags for testing loading skeletons",
+      "Auto-generates strongly-typed TypeScript fetch client"
+    ],
+    "category": "cli",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Node.js", "Faker.js", "Hono"],
+    "is_seeded": true
+  },
+  {
+    "title": "PharmFind Rare Medication Locator",
+    "slug": "pharmfind-rare-medication-locator",
+    "hook": "Search engine where patients broadcast a prescription request to verified pharmacies within a 10km radius.",
+    "problem_statement": "Patients and relatives waste critical hours driving from pharmacy to pharmacy searching for out-of-stock or specialized medications.",
+    "mvp_features": [
+      "Patient uploads prescription name or photo and selects radius",
+      "Verified pharmacists get a WhatsApp/Web ping and tap 'In Stock + Price'",
+      "Patient sees comparing prices and distances on a map and reserves for pickup",
+      "NAFDAC/regulatory batch number verification check"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "Supabase", "Leaflet Maps", "WhatsApp Cloud API"],
+    "is_seeded": true
+  },
+  {
+    "title": "YouTube Tutorial Code Extractor",
+    "slug": "youtube-tutorial-code-extractor",
+    "hook": "Browser extension that lets you copy code directly from paused YouTube programming video frames.",
+    "problem_statement": "Learners watching coding tutorials constantly pause at blurry frames to manually type out code when the creator didn't link a GitHub repo.",
+    "mvp_features": [
+      "Adds a 'Copy Code from Frame' button directly onto the YouTube video player bar",
+      "Captures HTML5 video canvas frame and runs fast Vision OCR optimized for code syntax",
+      "Auto-corrects indentation and detects programming language",
+      "Maintains a scratchpad sidebar of all snippets grabbed from the current video"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Chrome Extension", "Gemini Flash Vision", "React"],
+    "is_seeded": true
+  },
+  {
+    "title": "SmartPosture Webcam Coach",
+    "slug": "smartposture-webcam-coach",
+    "hook": "Privacy-first browser tab that runs local PoseNet on your webcam and gently blurs your screen when you slouch.",
+    "problem_statement": "Developers hunch over laptops for 8+ hours a day, leading to chronic neck and back pain, but don't want webcam feeds sent to a server.",
+    "mvp_features": [
+      "100% client-side MediaPipe Pose estimation with zero video ever leaving the device",
+      "10-second calibration of upright sitting posture",
+      "Subtle desktop notification or screen edge vignette when slouching exceeds 30 seconds",
+      "Daily posture score graph stored in local browser storage"
+    ],
+    "category": "ai",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["React", "MediaPipe", "TypeScript", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "EventBadge QR Offline Check-In",
+    "slug": "eventbadge-qr-offline-checkin",
+    "hook": "Open-source event check-in PWA and thermal label printer bridge for local tech meetups and conferences.",
+    "problem_statement": "Eventbrite and Luma check-in apps lag at venue doors when 500 attendees arrive at once and jam cell towers.",
+    "mvp_features": [
+      "Pre-caches full attendee list locally onto volunteer phones before doors open",
+      "Sub-100ms camera QR scanner with peer-to-peer local Wi-Fi sync between ushers",
+      "1-click Bluetooth print to affordable thermal name-badge printers",
+      "CSV import from Luma, Eventbrite, or Google Forms"
+    ],
+    "category": "mobile",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js PWA", "WebBluetooth API", "IndexedDB", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "SQL-Index Advisor from Slow Logs",
+    "slug": "sql-index-advisor-slow-logs",
+    "hook": "Paste your PostgreSQL slow query log and schema to get exact `CREATE INDEX CONCURRENTLY` fixes.",
+    "problem_statement": "Full-stack developers rely on ORMs and often hit massive database CPU spikes in production due to missing composite indexes.",
+    "mvp_features": [
+      "Parses `EXPLAIN ANALYZE` output into a visual execution tree highlighting Seq Scans",
+      "Recommends composite B-Tree or GIN indexes based on WHERE and ORDER BY clauses",
+      "Warns about write-overhead and index bloat trade-offs",
+      "Generates safe zero-downtime migration SQL files"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "TypeScript", "D3.js", "Gemini API"],
+    "is_seeded": true
+  },
+  {
+    "title": "ArtisanVerify Local Trade Directory",
+    "slug": "artisanverify-local-trade-directory",
+    "hook": "Neighborhood-verified directory of electricians, plumbers, and mechanics ranked purely by completed job receipts.",
+    "problem_statement": "Finding a reliable technician in urban cities relies on word-of-mouth because online directories are full of fake reviews.",
+    "mvp_features": [
+      "Reviews can only be posted when backed by a verified payment transfer or job code",
+      "Before/After photo portfolio per artisan stored via lightweight compression",
+      "Direct click-to-WhatsApp or call button with upfront call-out fee transparency",
+      "Neighborhood cluster filter by LGA/district"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "Supabase", "Cloudinary", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "Dotfiles TimeMachine Bootstrapper",
+    "slug": "dotfiles-timemachine-bootstrapper",
+    "hook": "Interactive TUI tool that snapshots your Mac/Linux terminal setup, VS Code extensions, and Homebrew packages into a single script.",
+    "problem_statement": "Setting up a new developer laptop from scratch takes two days of remembering fonts, aliases, and CLI tools.",
+    "mvp_features": [
+      "Scans installed Brew/Apt packages, global npm binaries, Zsh plugins, and editor extensions",
+      "Generates a clean, idempotent `setup.sh` script hosted in a GitHub Gist",
+      "Interactive terminal UI (Bubbletea/Ink) to check/uncheck which tools to install on a new machine",
+      "Automatic symlink manager for `.zshrc`, `.gitconfig`, and `.tmux.conf`"
+    ],
+    "category": "cli",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Go", "Bubbletea", "Bash", "GitHub API"],
+    "is_seeded": true
+  },
+  {
+    "title": "flashcard-from-commits",
+    "slug": "flashcard-from-commits",
+    "hook": "Generates spaced-repetition Anki flashcards from bugs you fixed in your own GitHub Pull Requests.",
+    "problem_statement": "Junior developers solve hard bugs with AI assistance, merge the code, and immediately forget the underlying concept.",
+    "mvp_features": [
+      "GitHub webhook listens for merged PRs or `fix:` commit messages",
+      "Extracts the root cause and fix pattern into a Q&A flashcard",
+      "2-minute daily quiz dashboard using SM-2 spaced repetition algorithm",
+      "One-click export to `.apkg` Anki deck format"
+    ],
+    "category": "ai",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "GitHub API", "Gemini API", "Supabase"],
+    "is_seeded": true
+  },
+  {
+    "title": "LPG Gas Cylinder Weight Monitor",
+    "slug": "lpg-gas-cylinder-weight-monitor",
+    "hook": "Load-cell coaster that sits under a home cooking gas cylinder and alerts your phone 3 days before gas runs out.",
+    "problem_statement": "Cooking gas cylinders always seem to run out in the middle of cooking dinner with no built-in fuel gauge.",
+    "mvp_features": [
+      "HX711 load cell amplifier + 50kg strain gauge base plate calibration",
+      "Subtracts tare weight of steel cylinder to calculate exact remaining kg of gas",
+      "Predicts remaining days based on rolling 14-day household burn rate",
+      "1-tap reorder button to message local gas refill vendor on WhatsApp"
+    ],
+    "category": "hardware",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "open",
+    "suggested_stack": ["ESP32", "HX711", "C++", "Flutter"],
+    "is_seeded": true
+  },
+  {
+    "title": "ReadMe Hero GIF Recorder",
+    "slug": "readme-hero-gif-recorder",
+    "hook": "Browser-based screen recorder that wraps your localhost demo in a sleek macOS window frame and exports an optimized GIF/MP4.",
+    "problem_statement": "90% of open-source GitHub repositories get ignored because their README lacks a clean visual demo at the top.",
+    "mvp_features": [
+      "Uses browser `getDisplayMedia` API with zero desktop installation required",
+      "Auto-adds gradient background, drop shadow, and smooth cursor zoom on clicks",
+      "Compresses output under GitHub's 10MB README embed limit",
+      "Generates ready-to-paste Markdown embed snippet"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Canvas API", "FFmpeg.wasm", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "Freelance ScopeCreep Shield",
+    "slug": "freelance-scopecreep-shield",
+    "hook": "Client portal where every 'quick small tweak' request automatically calculates the timeline and cost impact before approval.",
+    "problem_statement": "Freelancers lose profitability because clients ask for 'just one tiny button' on WhatsApp that turns into 12 hours of unpaid backend work.",
+    "mvp_features": [
+      "Locked baseline milestone list signed off at project start",
+      "'Request Change' form for clients that forces selection of priority vs deadline shift",
+      "Freelancer inputs estimated hours, generating an instant micro-invoice approval link",
+      "Visual timeline showing how approved extras shifted the original launch date"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Supabase", "Tailwind CSS", "Resend"],
+    "is_seeded": true
+  },
+  {
+    "title": "A11y ScreenReader Simulator Extension",
+    "slug": "a11y-screenreader-simulator-extension",
+    "hook": "Chrome extension that blurs the visual screen and forces developers to navigate their site using only keyboard and synthetic screen-reader audio.",
+    "problem_statement": "Developers rarely test accessibility properly because learning full NVDA/VoiceOver shortcuts takes time, leaving broken ARIA labels everywhere.",
+    "mvp_features": [
+      "1-click visual blur overlay to simulate low-vision or blind navigation",
+      "Visualizes the exact Accessibility Tree and tab-focus ring sequence",
+      "Flags unlabelled icon buttons and broken heading hierarchies in real time",
+      "Generates a shareable A11y score badge for PR reviews"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Web Speech API", "Manifest V3", "CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "LogStream Tailer for Docker Compose",
+    "slug": "logstream-tailer-docker-compose",
+    "hook": "Lightweight local web UI that splits, color-codes, and filters noisy multi-container Docker Compose logs.",
+    "problem_statement": "Running `docker compose up` with 6 microservices interleaves thousands of log lines in one terminal, making debugging painful.",
+    "mvp_features": [
+      "Single binary or Docker container mounting `/var/run/docker.sock`",
+      "Split-pane browser UI showing each container stream in its own searchable column",
+      "JSON log pretty-printer with instant filter by `level:error` or `request_id`",
+      "1-click pause, clear, and export stack trace to clipboard"
+    ],
+    "category": "cli",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Go", "Docker SDK", "React", "WebSockets"],
+    "is_seeded": true
+  },
+  {
+    "title": "Diaspora Remit Fee Comparator",
+    "slug": "diaspora-remit-fee-comparator",
+    "hook": "Live aggregator comparing real exchange rates plus hidden fees across Wise, LemFi, Sendwave, and parallel corridors.",
+    "problem_statement": "Diaspora senders lose 3% to 8% on remittances because apps advertise 'Zero Fee' while hiding huge spreads in the exchange rate.",
+    "mvp_features": [
+      "Scrapes and normalizes live effective payout rates every 15 minutes",
+      "Calculates exact final recipient amount in local currency after all spreads",
+      "Telegram/Email alert when a corridor hits a user's target exchange rate",
+      "Historical 30-day rate trend chart per currency pair"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Africa",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Cron Jobs", "Supabase", "Recharts"],
+    "is_seeded": true
+  },
+  {
+    "title": "SystemDesign Canvas with Traffic Simulator",
+    "slug": "systemdesign-canvas-traffic-simulator",
+    "hook": "Excalidraw-style architecture whiteboard where you can press 'Play' to simulate 10,000 req/sec and see which node bottlenecks.",
+    "problem_statement": "Static architecture diagrams look great in interviews and design docs but don't reveal single points of failure or queue backpressure.",
+    "mvp_features": [
+      "Drag-and-drop nodes for Load Balancer, Redis Cache, Postgres, Worker Queue, and CDN",
+      "Configurable throughput, latency, and cache-hit-ratio per component",
+      "Animated packet flow that turns red when a database node exceeds max connections",
+      "Pre-built interactive challenges ('Design URL Shortener', 'Design Flash Sale')"
+    ],
+    "category": "web",
+    "difficulty": "advanced",
+    "target_region": "Global",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "React Flow", "TypeScript", "Zustand"],
+    "is_seeded": true
+  },
+  {
+    "title": "ReceiptSplit OCR for Group Dinners",
+    "slug": "receiptsplit-ocr-group-dinners",
+    "hook": "Snap a photo of a restaurant bill, tap the items you ate, and generate instant bank transfer links including proportional tax/tip.",
+    "problem_statement": "Splitting a 10-person restaurant bill takes 15 minutes of awkward calculator math and forgotten VAT/service charges.",
+    "mvp_features": [
+      "Mobile camera OCR that extracts line items and prices in 3 seconds",
+      "Shareable room link where friends tap their own items in real time",
+      "Proportional distribution of VAT, service charge, and delivery fees",
+      "Generates pre-filled payment details and tracks who has paid"
+    ],
+    "category": "mobile",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js PWA", "Gemini Flash Vision", "Supabase Realtime", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "FontPair Live Preview Bookmarklet",
+    "slug": "fontpair-live-preview-bookmarklet",
+    "hook": "Browser extension that lets you hot-swap Google Fonts on your localhost or live site with a keyboard shortcut.",
+    "problem_statement": "Designers and devs waste time editing CSS files and reloading just to test how 15 different heading/body font pairings feel on their actual layout.",
+    "mvp_features": [
+      "Floating toolbar that injects Google Fonts stylesheets dynamically into the active page",
+      "Curated 'Spacebar to Shuffle' pairings by vibe (Technical, Editorial, Playful, Brutalist)",
+      "Lock Heading font while cycling Body font (or vice versa)",
+      "1-click copy of `<link>` tags and `next/font/google` import code"
+    ],
+    "category": "extension",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "Chrome Extension", "Google Fonts API"],
+    "is_seeded": true
+  },
+  {
+    "title": "ColdEmail Warmup & SPF Doctor",
+    "slug": "coldemail-warmup-spf-doctor",
+    "hook": "Free diagnostic tool that checks a domain's SPF, DKIM, DMARC, and blacklist status and generates exact DNS records to fix deliverability.",
+    "problem_statement": "Transactional and founder emails land straight in Spam because DNS authentication records are misconfigured.",
+    "mvp_features": [
+      "Instant DNS TXT record lookup and syntax validator for SPF, DKIM, and DMARC",
+      "Checks domain IP against 25+ major spam blocklists (Spamhaus, Barracuda)",
+      "Provider-specific copy-paste DNS fix guide for Cloudflare, Namecheap, and Route53",
+      "Test email inbox scorer that inspects raw headers"
+    ],
+    "category": "web",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "Node DNS API", "TypeScript", "Tailwind CSS"],
+    "is_seeded": true
+  },
+  {
+    "title": "SmartSoil Drip Irrigation Controller",
+    "slug": "smartsoil-drip-irrigation-controller",
+    "hook": "Solar-powered soil moisture node that opens a 12V solenoid valve only when root moisture drops and no rain is forecast.",
+    "problem_statement": "Timer-based irrigation wastes water by running right before or after heavy rain.",
+    "mvp_features": [
+      "Capacitive corrosion-resistant soil moisture sensor reading every 30 minutes",
+      "Fetches local OpenWeatherMap rain probability before triggering water valve",
+      "Deep-sleep power optimization running for months on a single 18650 Li-ion cell + mini solar panel",
+      "Telegram bot notification for watering cycles and battery health"
+    ],
+    "category": "hardware",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["ESP32", "C++", "OpenWeather API", "Telegram Bot API"],
+    "is_seeded": true
+  },
+  {
+    "title": "PR-Review Checklist Enforcer",
+    "slug": "pr-review-checklist-enforcer",
+    "hook": "Context-aware GitHub bot that injects custom review checklists based on which folder or file type was modified.",
+    "problem_statement": "Static PR templates get ignored because developers tick every box blindly when most items don't apply to their change.",
+    "mvp_features": [
+      "Reads `.pr-rules.yml` mapping file globs (e.g., `migrations/*.sql` or `auth/**`) to specific checks",
+      "Posts dynamic comment only when matching sensitive files are touched",
+      "Blocks merge until required security or migration checkboxes are ticked",
+      "Zero external hosting required when run as a GitHub Action"
+    ],
+    "category": "cli",
+    "difficulty": "beginner",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["TypeScript", "GitHub Actions", "YAML"],
+    "is_seeded": true
+  },
+  {
+    "title": "InterviewCode Replay & Self-Coach",
+    "slug": "interviewcode-replay-self-coach",
+    "hook": "LeetCode/Frontend practice pad that records your keystrokes and voice think-aloud, then critiques your communication clarity.",
+    "problem_statement": "Developers fail technical interviews not because they can't code, but because they go silent for 15 minutes or jump into coding before clarifying edge cases.",
+    "mvp_features": [
+      "Monaco code editor paired with browser microphone recording",
+      "Timeline replay syncing voice transcript with exact code edits",
+      "AI Rubric evaluating: Clarifying Questions, Brute-Force Explanation, Time/Space Complexity, and Debugging Calmness",
+      "Curated bank of 30 realistic practical engineering tasks (not just binary trees)"
+    ],
+    "category": "ai",
+    "difficulty": "advanced",
+    "target_region": "Global",
+    "collab_status": "seeking_cofounder",
+    "suggested_stack": ["Next.js", "Monaco Editor", "Gemini Multimodal API", "Supabase"],
+    "is_seeded": true
+  },
+  {
+    "title": "SubTrack SMS Bank Alert Parser",
+    "slug": "subtrack-sms-bank-alert-parser",
+    "hook": "Privacy-first Android app that parses local bank debit SMS/email alerts offline to categorize spending and detect forgotten subscriptions.",
+    "problem_statement": "Open-banking APIs rarely work reliably across all banks in emerging markets, leaving users unable to track automated debit alerts automatically.",
+    "mvp_features": [
+      "100% on-device regex/NLP parser for major bank alert formats with zero cloud upload",
+      "Auto-detects recurring monthly debits and alerts 48 hours before renewal",
+      "Instant breakdown of Bank Charges/Stamp Duty vs Food vs Data/Airtime",
+      "Encrypted local backup export to Google Drive or CSV"
+    ],
+    "category": "mobile",
+    "difficulty": "intermediate",
+    "target_region": "Nigeria",
+    "collab_status": "open",
+    "suggested_stack": ["Flutter", "SQLite", "Regex", "Local Notifications"],
+    "is_seeded": true
+  },
+  {
+    "title": "OpenSource Good-First-Issue Matchmaker",
+    "slug": "opensource-good-first-issue-matchmaker",
+    "hook": "Connect your GitHub profile and get a daily personalized feed of active `good-first-issue` tickets matching your exact repo languages.",
+    "problem_statement": "Developers want to contribute to open source, but searching GitHub labels returns thousands of stale, claimed, or abandoned issues.",
+    "mvp_features": [
+      "Analyzes user's top languages and frameworks from their public repos",
+      "Filters GitHub issues by: unassigned, created < 14 days ago, maintainer active in last 48h",
+      "Generates a plain-English 'Where to start in the codebase' brief per issue",
+      "One-click bookmark and PR status tracker"
+    ],
+    "category": "web",
+    "difficulty": "intermediate",
+    "target_region": "Global",
+    "collab_status": "open",
+    "suggested_stack": ["Next.js", "GitHub GraphQL API", "Supabase", "Tailwind CSS"],
+    "is_seeded": true
+  }
+]
