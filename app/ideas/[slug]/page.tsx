@@ -34,6 +34,10 @@ import {
   Send,
   CornerDownRight,
   ArrowRight,
+  Bot,
+  Users,
+  UserCheck,
+  UserPlus,
 } from "lucide-react";
 import {
   getIdeaBySlug,
@@ -46,11 +50,15 @@ import {
   addIdeaBuild,
   addIdeaComment,
   toggleCommentLike,
+  addCollaborationRequest,
+  reviewCollaborationRequest,
   IdeaLineage,
 } from "@/lib/ideas";
-import { Idea, IdeaDifficulty, FeatureRequest, IdeaBuild, IdeaComment } from "@/types/idea";
+import { Idea, IdeaAuthor, IdeaDifficulty, FeatureRequest, IdeaBuild, IdeaComment, CollaborationRequest } from "@/types/idea";
 import { ForkModal } from "@/components/fork-modal";
 import { LineageTree } from "@/components/lineage-tree";
+import { CollaborateModal } from "@/components/collaborate-modal";
+import { SpecExportModal } from "@/components/spec-export-modal";
 import { getCurrentProfile } from "@/lib/supabase/client";
 
 const DIFFICULTY_CONFIG: Record<
@@ -94,7 +102,7 @@ function IdeaDetailContent() {
   const [checkedFeatures, setCheckedFeatures] = useState<Record<number, boolean>>({});
 
   // Active view tab
-  const [activeTab, setActiveTab] = useState<"spec" | "discussions" | "prs" | "builds" | "lineage">("spec");
+  const [activeTab, setActiveTab] = useState<"spec" | "discussions" | "prs" | "builds" | "lineage" | "team">("spec");
 
   // Interaction feedback states
   const [starred, setStarred] = useState(false);
@@ -107,6 +115,8 @@ function IdeaDetailContent() {
   const [forkModalOpen, setForkModalOpen] = useState(false);
   const [prModalOpen, setPrModalOpen] = useState(false);
   const [buildModalOpen, setBuildModalOpen] = useState(false);
+  const [collabModalOpen, setCollabModalOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   // Maintainer view mode
   const [isOwnerView, setIsOwnerView] = useState(true);
@@ -125,6 +135,8 @@ function IdeaDetailContent() {
   // Lists
   const [featureRequests, setFeatureRequests] = useState<FeatureRequest[]>([]);
   const [builds, setBuilds] = useState<IdeaBuild[]>([]);
+  const [collabRequests, setCollabRequests] = useState<CollaborationRequest[]>([]);
+  const [teamMembers, setTeamMembers] = useState<IdeaAuthor[]>([]);
 
   // Discussion & Comments state
   const [comments, setComments] = useState<IdeaComment[]>([]);
@@ -145,6 +157,8 @@ function IdeaDetailContent() {
         setFeatureRequests(fetchedIdea.feature_requests || []);
         setBuilds(fetchedIdea.builds || []);
         setComments(fetchedIdea.comments || []);
+        setCollabRequests(fetchedIdea.collaboration_requests || []);
+        setTeamMembers(fetchedIdea.team_members || []);
 
         const tree = await getIdeaLineage(fetchedIdea.slug);
         setLineage(tree);
@@ -403,6 +417,18 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     }
   };
 
+  const handleReviewCollab = async (requestId: string, decision: "accepted" | "declined") => {
+    if (!idea) return;
+    const res = await reviewCollaborationRequest(idea.slug, requestId, decision);
+    if (res.success && res.idea) {
+      setIdea(res.idea);
+      setCollabRequests(res.idea.collaboration_requests || []);
+      setTeamMembers(res.idea.team_members || []);
+      setBannerNotice(res.message);
+      setTimeout(() => setBannerNotice(null), 5000);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#111113] selection:bg-amber-100 selection:text-amber-900">
       <div className="max-w-7xl mx-auto min-h-screen flex flex-col justify-between">
@@ -440,6 +466,28 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
             >
               <Star className={`w-3.5 h-3.5 ${starred ? "fill-amber-500 text-amber-500" : ""}`} />
               <span>{starCount}</span>
+            </button>
+
+            {/* Collaborate Trigger */}
+            <button
+              type="button"
+              onClick={() => setCollabModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all shadow-sm cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5 text-amber-700" />
+              <span className="hidden sm:inline">Collaborate</span>
+              <span className="sm:hidden">Join</span>
+            </button>
+
+            {/* Export for AI Trigger */}
+            <button
+              type="button"
+              onClick={() => setExportModalOpen(true)}
+              title="Export Spec for AI Coding Agents & GitHub"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold text-zinc-700 hover:text-black bg-white border border-zinc-200 hover:border-zinc-300 transition-all shadow-sm cursor-pointer"
+            >
+              <Bot className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden md:inline">Export for AI</span>
             </button>
 
             {/* Fork Modal Trigger */}
@@ -546,6 +594,7 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                   { id: "prs", label: "Feature PRs", icon: GitPullRequest, count: featureRequests.length },
                   { id: "builds", label: "Shipped Builds", icon: Rocket, count: builds.length },
                   { id: "lineage", label: "Lineage Graph", icon: GitBranch, count: (lineage?.children.length ?? 0) + 1 },
+                  { id: "team", label: "Team & Collab", icon: Users, count: teamMembers.length + collabRequests.length },
                 ].map((tab) => {
                   const active = activeTab === tab.id;
                   const Icon = tab.icon;
@@ -1237,6 +1286,198 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
               {activeTab === "lineage" && lineage && (
                 <LineageTree lineage={lineage} onForkClick={() => setForkModalOpen(true)} />
               )}
+
+              {/* TAB 5: TEAM & COLLABORATION */}
+              {activeTab === "team" && (
+                <div className="space-y-6">
+                  {/* Team Header & CTA Banner */}
+                  <div className="bento-white p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-5 h-5 text-amber-600" />
+                        <h3 className="text-lg font-sans font-semibold text-[#111113]">
+                          Engineering Team & Collaborators
+                        </h3>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
+                          idea.collab_status === "seeking_cofounder"
+                            ? "bg-amber-100 text-amber-900 border border-amber-300"
+                            : "bg-emerald-100 text-emerald-900 border border-emerald-300"
+                        }`}>
+                          {idea.collab_status === "seeking_cofounder" ? "Seeking Co-Founder" : "Open Collaboration"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Builders who have teamed up to architect, review, or code this blueprint.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setCollabModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 h-10 px-5 rounded-xl bg-[#111113] hover:bg-zinc-800 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
+                    >
+                      <UserPlus size={14} />
+                      <span>Request to Join Team</span>
+                    </button>
+                  </div>
+
+                  {/* Active Team Roster */}
+                  <div className="bento-white p-6 sm:p-7 space-y-4">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 font-bold block pb-3 border-b border-zinc-100">
+                      ACTIVE TEAM ROSTER ({1 + teamMembers.length})
+                    </span>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Project Lead (Author) */}
+                      <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200/80 flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-200 text-amber-900 overflow-hidden flex items-center justify-center font-bold text-xs shrink-0">
+                          {idea.author?.avatar_url ? (
+                            <img src={idea.author.avatar_url} alt={idea.author.username} className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{idea.author?.username.slice(0, 2).toUpperCase() || "AU"}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-xs text-zinc-900 truncate">
+                              {idea.author?.full_name || idea.author?.username}
+                            </span>
+                            <span className="px-1.5 py-0.2 rounded-full bg-amber-200 text-amber-900 text-[9px] font-mono font-bold">
+                              LEAD
+                            </span>
+                          </div>
+                          <div className="text-[11px] font-mono text-zinc-500">@{idea.author?.username}</div>
+                          <div className="text-[11px] text-zinc-600 mt-1">Spec Creator & Maintainer</div>
+                        </div>
+                      </div>
+
+                      {/* Accepted Team Members */}
+                      {teamMembers.map((member, idx) => (
+                        <div key={idx} className="p-4 rounded-2xl bg-white border border-zinc-200/80 flex items-start gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-zinc-100 text-zinc-800 overflow-hidden flex items-center justify-center font-bold text-xs shrink-0">
+                            {member.avatar_url ? (
+                              <img src={member.avatar_url} alt={member.username} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{member.username.slice(0, 2).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-xs text-zinc-900 truncate">
+                                {member.full_name || member.username}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-mono font-bold">
+                                BUILDER
+                              </span>
+                            </div>
+                            <div className="text-[11px] font-mono text-zinc-500">@{member.username}</div>
+                            <div className="text-[11px] text-zinc-600 mt-1">Active Collaborator</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Collaboration Requests (Proposals) */}
+                  <div className="bento-white p-6 sm:p-7 space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500 font-bold">
+                        COLLABORATION PITCHES ({collabRequests.length})
+                      </span>
+                      <span className="text-[11px] font-mono text-zinc-500">
+                        {idea.author?.username ? `@${idea.author.username}'s inbox` : "Review queue"}
+                      </span>
+                    </div>
+
+                    {collabRequests.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="w-10 h-10 rounded-2xl bg-zinc-100 text-zinc-400 flex items-center justify-center mx-auto mb-3">
+                          <UserPlus size={18} />
+                        </div>
+                        <p className="text-xs text-zinc-500 font-mono">No pending collaboration pitches yet.</p>
+                        <button
+                          type="button"
+                          onClick={() => setCollabModalOpen(true)}
+                          className="mt-3 text-xs font-mono font-semibold text-amber-700 hover:text-amber-800 underline"
+                        >
+                          Be the first to pitch your role →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {collabRequests.map((req) => (
+                          <div
+                            key={req.id}
+                            className={`p-4 rounded-2xl border transition-all ${
+                              req.status === "accepted"
+                                ? "bg-emerald-50/50 border-emerald-200"
+                                : req.status === "declined"
+                                ? "bg-zinc-50/60 border-zinc-200 opacity-60"
+                                : "bg-white border-zinc-200/90 shadow-sm"
+                            }`}
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-xs text-zinc-900">
+                                  @{req.applicant.username}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 text-[10px] font-mono font-medium">
+                                  {req.role}
+                                </span>
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  • {req.availability}
+                                </span>
+                              </div>
+
+                              <span
+                                className={`self-start sm:self-auto px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                                  req.status === "accepted"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : req.status === "declined"
+                                    ? "bg-zinc-100 text-zinc-600"
+                                    : "bg-amber-100 text-amber-900"
+                                }`}
+                              >
+                                {req.status}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-zinc-700 leading-relaxed mb-3">
+                              "{req.pitch}"
+                            </p>
+
+                            <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-100">
+                              <div className="font-mono text-[10px] text-zinc-500">
+                                Contact: <span className="text-zinc-800 font-semibold">{req.contact_handle}</span>
+                              </div>
+
+                              {req.status === "pending" && (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCollab(req.id, "accepted")}
+                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[11px] font-semibold transition-colors"
+                                  >
+                                    <UserCheck size={12} />
+                                    <span>Accept</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleReviewCollab(req.id, "declined")}
+                                    className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-mono text-[11px] transition-colors"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* RIGHT COLUMN: Author card, Complexity Telemetry, and Related (4 cols) */}
@@ -1654,6 +1895,31 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
           </div>
         </div>
       )}
+
+      {/* COLLABORATE MODAL */}
+      <CollaborateModal
+        idea={idea}
+        isOpen={collabModalOpen}
+        onClose={() => setCollabModalOpen(false)}
+        onSuccess={(msg) => {
+          setBannerNotice(msg);
+          setTimeout(() => setBannerNotice(null), 5000);
+          getIdeaBySlug(idea.slug).then((updated) => {
+            if (updated) {
+              setIdea(updated);
+              setCollabRequests(updated.collaboration_requests || []);
+              setTeamMembers(updated.team_members || []);
+            }
+          });
+        }}
+      />
+
+      {/* SPEC EXPORT MODAL */}
+      <SpecExportModal
+        idea={idea}
+        isOpen={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+      />
     </div>
   );
 }

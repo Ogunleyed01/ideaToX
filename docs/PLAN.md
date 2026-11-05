@@ -61,3 +61,25 @@
   - Add "Explore (50+)" to `FloatingNavbar` and update cross-page anchor routing.
   - Add "Starred Specs" portfolio tab to User Profile (`/profile/[username]`).
   - Add Discovery CTA banner to landing page Curated Blueprints gallery.
+
+## Milestone 8: The Official About & Platform Architecture Page (`/about`) (Completed)
+- [x] **Task 8.1:** Build `/about` page with strict Editorial Daylight Canvas (`#FAF9F6`), dual pastel auroras, and Obsidian hardware consoles:
+  - Executive story: The "GitHub + Dribbble" for software specifications and project blueprints.
+  - The 4 Core Mechanics visual breakdown (Structured Specs, Chaos Synthesizer, Git Lineage Branching, Shipped Showcase).
+  - The Reputation Algorithm & Badges telemetry matrix (Ideator, Remixer, Shipper, Architect).
+  - Open-source manifesto, architectural principles, and tech stack disclosures.
+  - Direct links in `FloatingNavbar` and `ObsidianMegaFooter`.
+
+## Milestone 9: Builder Collaboration Requests & Team Formation Engine (Completed)
+- [x] **Task 9.1:** Build **Collaboration Request Modal** on Idea Detail view (`/ideas/[slug]`):
+  - When an idea is marked `Seeking Co-Founder / Builder`, allow authenticated builders to pitch their role (Frontend, Systems/Backend, AI/ML, Hardware, Mobile).
+  - Provide contact handle (GitHub, Discord, X, Email) and personal portfolio link.
+  - Store collaboration requests in state and database schema.
+- [x] **Task 9.2:** Build **Collaborators & Team Roster HUD** on Idea Detail page:
+  - Idea owners can view incoming collaboration pitches, accept or pass, and manage active collaborators.
+  - Display accepted team members on the specification header.
+
+## Milestone 10: AI Coding Agent Exporter & GitHub PRD Tooling (Completed)
+- [x] **Task 10.1:** Build **"Export for AI Coding Agents" Modal** on `/ideas/[slug]`:
+  - 1-click optimized system prompts for **Cursor**, **Windsurf**, **Antigravity**, and **Claude Code** including architectural constraints, stack rules, and checkable MVP milestones.
+  - 1-click **GitHub Issue / PRD Markdown** download and copy button.

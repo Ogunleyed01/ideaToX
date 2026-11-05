@@ -1,5 +1,5 @@
 import seedIdeasRaw from "@/data/seed-ideas.json";
-import { Idea, IdeaAuthor, FeatureRequest, IdeaBuild, IdeaComment, UserProfileData } from "@/types/idea";
+import { Idea, IdeaAuthor, FeatureRequest, IdeaBuild, IdeaComment, UserProfileData, CollaborationRequest } from "@/types/idea";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 
 export const MOCK_AUTHORS: IdeaAuthor[] = [
@@ -147,6 +147,25 @@ let memoryIdeas: Idea[] = (seedIdeasRaw as Idea[]).map((raw, idx) => {
     },
   ];
 
+  const collabList: CollaborationRequest[] = raw.collab_status === "seeking_cofounder" ? [
+    {
+      id: `collab-${idx}-1`,
+      idea_id: raw.slug,
+      applicant: MOCK_AUTHORS[(idx + 2) % MOCK_AUTHORS.length],
+      role: "Backend & Systems Architect",
+      contact_handle: "discord: arch_systems#4412",
+      availability: "Part-Time Collaborator (15–20 hrs/wk)",
+      pitch: "I've built similar edge telemetry systems in Go and Rust. Would love to own the distributed sync protocol and offline indexing.",
+      status: "pending",
+      created_at: "2 days ago",
+    }
+  ] : [];
+
+  const teamList: IdeaAuthor[] = [
+    author,
+    ...(idx % 2 === 0 ? [MOCK_AUTHORS[(idx + 3) % MOCK_AUTHORS.length]] : []),
+  ];
+
   return {
     ...raw,
     upvotes_count: upvotes,
@@ -156,6 +175,8 @@ let memoryIdeas: Idea[] = (seedIdeasRaw as Idea[]).map((raw, idx) => {
     feature_requests,
     builds: buildsList,
     comments: commentsList,
+    collaboration_requests: collabList,
+    team_members: teamList,
     created_at: new Date(Date.now() - (idx + 1) * 86400000 * 3).toISOString(),
   };
 });
@@ -222,6 +243,8 @@ export async function getIdeaBySlug(slug: string): Promise<Idea | null> {
             ...c,
             user: c.user || MOCK_AUTHORS[0],
           })),
+          collaboration_requests: row.collaboration_requests || [],
+          team_members: row.team_members || [],
         };
       }
     } catch (err) {
@@ -935,5 +958,73 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
       reputation,
       rankTitle,
     },
+  };
+}
+
+// -------------------------------------------------------------
+// MILESTONE 9: BUILDER COLLABORATION & TEAM FORMATION
+// -------------------------------------------------------------
+export async function addCollaborationRequest(
+  slug: string,
+  req: {
+    role: string;
+    contact_handle: string;
+    availability: string;
+    pitch: string;
+    applicant?: IdeaAuthor;
+  }
+): Promise<CollaborationRequest | null> {
+  const normalized = slug.toLowerCase();
+  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  if (!idea) return null;
+
+  const newCollab: CollaborationRequest = {
+    id: `collab-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    idea_id: idea.slug,
+    applicant: req.applicant || {
+      username: "you_builder",
+      full_name: "Interested Collaborator",
+      reputation_score: 180,
+    },
+    role: req.role,
+    contact_handle: req.contact_handle,
+    availability: req.availability,
+    pitch: req.pitch.trim(),
+    status: "pending",
+    created_at: "Just now",
+  };
+
+  idea.collaboration_requests = [newCollab, ...(idea.collaboration_requests || [])];
+  return newCollab;
+}
+
+export async function reviewCollaborationRequest(
+  slug: string,
+  requestId: string,
+  decision: "accepted" | "declined"
+): Promise<{ success: boolean; idea: Idea | null; message: string }> {
+  const normalized = slug.toLowerCase();
+  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  if (!idea) return { success: false, idea: null, message: "Idea blueprint not found" };
+
+  const req = idea.collaboration_requests?.find((r) => r.id === requestId);
+  if (!req) return { success: false, idea, message: "Collaboration request not found" };
+
+  req.status = decision;
+
+  if (decision === "accepted") {
+    const existing = idea.team_members || [];
+    if (!existing.some((m) => m.username === req.applicant.username)) {
+      idea.team_members = [...existing, req.applicant];
+    }
+  }
+
+  return {
+    success: true,
+    idea: { ...idea },
+    message:
+      decision === "accepted"
+        ? `Accepted @${req.applicant.username} as ${req.role} on the project team!`
+        : `Declined collaboration pitch from @${req.applicant.username}.`,
   };
 }

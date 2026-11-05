@@ -90,4 +90,18 @@ export interface Idea {
   feature_requests?: FeatureRequest[];
   builds?: IdeaBuild[];
   comments?: IdeaComment[];
+  collaboration_requests?: CollaborationRequest[];
+  team_members?: IdeaAuthor[];
 }
+
+export interface CollaborationRequest {
+  id: string;
+  idea_id: string;
+  applicant: IdeaAuthor;
+  role: string;
+  contact_handle: string;
+  availability: string;
+  pitch: string;
+  status: 'pending' | 'accepted' | 'declined';
+  created_at: string;
+}

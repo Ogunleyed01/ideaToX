@@ -81,6 +81,12 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
               </span>
             </Link>
             <Link
+              href="/about"
+              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
+            >
+              About
+            </Link>
+            <Link
               href="/#studio"
               className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
             >
@@ -91,12 +97,6 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
               className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
             >
               Sandbox
-            </Link>
-            <Link
-              href="/#manifesto"
-              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
-            >
-              Manifesto
             </Link>
           </div>
 

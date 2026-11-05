@@ -113,10 +113,10 @@ export function ObsidianMegaFooter() {
               Community
             </h4>
             <ul className="space-y-2 text-xs text-zinc-400">
-              <li><a href="#prs" className="hover:text-white transition-colors">Active Feature PRs</a></li>
-              <li><a href="#specs" className="hover:text-white transition-colors">Lineage Graph Trees</a></li>
-              <li><a href="/ideas/new" className="hover:text-white transition-colors">Publish a Blueprint</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Architecture Manifesto</a></li>
+              <li><a href="/ideas#prs" className="hover:text-white transition-colors">Active Feature PRs</a></li>
+              <li><a href="/ideas" className="hover:text-white transition-colors">Lineage Graph Trees</a></li>
+              <li><Link href="/ideas/new" className="hover:text-white transition-colors">Publish a Blueprint</Link></li>
+              <li><Link href="/about" className="hover:text-white transition-colors">About & Manifesto</Link></li>
             </ul>
           </div>
         </div>
