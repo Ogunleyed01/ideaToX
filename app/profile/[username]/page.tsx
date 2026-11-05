@@ -39,7 +39,7 @@ function UserProfileContent() {
 
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"specs" | "forks" | "builds" | "reputation">("specs");
+  const [activeTab, setActiveTab] = useState<"specs" | "forks" | "builds" | "starred" | "reputation">("specs");
   const [forkModalIdea, setForkModalIdea] = useState<Idea | null>(null);
 
   // Interaction toasts
@@ -101,7 +101,7 @@ function UserProfileContent() {
     );
   }
 
-  const { author, specs, forks, builds, stats } = profile;
+  const { author, specs, forks, builds, starred = [], stats } = profile;
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#111113] selection:bg-amber-100 selection:text-amber-900 flex flex-col justify-between">
@@ -368,6 +368,7 @@ function UserProfileContent() {
               { id: "specs", label: "Authored Specs", icon: Layers, count: specs.length },
               { id: "forks", label: "Remixes & Forks", icon: GitFork, count: forks.length },
               { id: "builds", label: "Shipped Builds", icon: Rocket, count: builds.length },
+              { id: "starred", label: "Starred Specs", icon: Star, count: starred.length },
               { id: "reputation", label: "Reputation & Badges", icon: Award, count: stats.reputation },
             ].map((tab) => {
               const active = activeTab === tab.id;
@@ -561,6 +562,43 @@ function UserProfileContent() {
                         </span>
                       </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: STARRED SPECS */}
+          {activeTab === "starred" && (
+            <div className="space-y-6">
+              {starred.length === 0 ? (
+                <div className="bento-white p-12 text-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center mx-auto">
+                    <Star className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-sans font-semibold text-[#111113]">
+                    No Starred Specifications Yet
+                  </h3>
+                  <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                    Blueprints you bookmark or star across the IdeaToX registry will appear here for fast reference.
+                  </p>
+                  <Link
+                    href="/ideas"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#111113] text-white text-xs font-mono font-semibold hover:bg-zinc-800 transition-colors"
+                  >
+                    <span>Explore Ideas Directory</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
+                  </Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {starred.map((idea, idx) => (
+                    <IdeaCard
+                      key={idea.slug}
+                      idea={idea}
+                      index={idx}
+                      onForkClick={(i) => setForkModalIdea(i)}
+                    />
                   ))}
                 </div>
               )}

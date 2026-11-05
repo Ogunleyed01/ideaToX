@@ -314,6 +314,13 @@ export function hasUserUpvoted(slug: string): boolean {
   return memoryUserUpvotes.has(slug.toLowerCase());
 }
 
+export async function getStarredIdeas(): Promise<Idea[]> {
+  const starredSlugs = getUserStars();
+  if (starredSlugs.length === 0) return [];
+  const all = await getAllIdeas();
+  return all.filter((i) => starredSlugs.includes(i.slug.toLowerCase()));
+}
+
 export async function toggleUpvote(
   slug: string
 ): Promise<{ starred: boolean; upvotes_count: number }> {
@@ -904,6 +911,11 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
   if (totalBuilds > 0) badgesSet.add("Shipper");
   if (userPRs.some((pr) => pr.status === "approved")) badgesSet.add("Architect");
 
+  const starredSlugs = getUserStars();
+  const userStarred = memoryIdeas.filter((i) =>
+    starredSlugs.includes(i.slug.toLowerCase())
+  );
+
   return {
     author: {
       ...author,
@@ -914,6 +926,7 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
     forks,
     builds: userBuilds,
     prs: userPRs,
+    starred: userStarred,
     stats: {
       totalSpecs,
       totalForks,

@@ -46,3 +46,18 @@
   - High-craft Obsidian Telemetry Console with score calculation (+10/star, +25/fork, +50/shipped build, +30/merged PR).
   - Tabbed portfolio for Authored Specs, Fork Remixes, and Shipped Proof-of-Work builds.
   - Direct author attribution links across Idea Cards, Lineage Trees, and Sidebar cards.
+
+## Milestone 7: The Idea Bank & Discovery Feed Engine (Completed)
+- [x] **Task 7.1:** Build dedicated **Explore & Idea Bank Feed** (`/ideas`):
+  - Responsive Bento Grid and Detailed List view of all 50+ project blueprints.
+  - Multi-dimensional filter controls: Category, Difficulty tier, Target Region (dynamically extracted), Collaboration status, and Shipped Proof-of-Work status.
+  - Multi-criteria sorting: Most Upvotes (Stars), Newest, Most Forked, Most Shipped Builds.
+  - Real-time debounced search bar querying title, hook, problem statement, and suggested stack tags.
+  - Telemetry counter with active filter indicators and 1-click filter reset.
+  - Direct Fork Modal branching and optimistic Star/Upvote toggling.
+- [x] **Task 7.2:** Enhance **Global Command Palette (⌘K)**:
+  - Dynamically search across all live specifications from anywhere in the app with keyboard shortcuts.
+- [x] **Task 7.3:** Extend **Dynamic Island Navigation** & User Profile:
+  - Add "Explore (50+)" to `FloatingNavbar` and update cross-page anchor routing.
+  - Add "Starred Specs" portfolio tab to User Profile (`/profile/[username]`).
+  - Add Discovery CTA banner to landing page Curated Blueprints gallery.

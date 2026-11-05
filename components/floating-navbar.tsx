@@ -71,30 +71,33 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
 
           {/* Quick Links */}
           <div className="hidden sm:flex items-center gap-1 text-[13px] text-zinc-300 font-medium">
-            <a
-              href="#specs"
-              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
+            <Link
+              href="/ideas"
+              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors flex items-center gap-1"
             >
-              Specs
-            </a>
-            <a
-              href="#manifesto"
-              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
-            >
-              Manifesto
-            </a>
-            <a
-              href="#studio"
+              <span>Explore</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300">
+                50+
+              </span>
+            </Link>
+            <Link
+              href="/#studio"
               className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
             >
               Studio
-            </a>
-            <a
-              href="#sandbox"
+            </Link>
+            <Link
+              href="/#sandbox"
               className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
             >
               Sandbox
-            </a>
+            </Link>
+            <Link
+              href="/#manifesto"
+              className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors"
+            >
+              Manifesto
+            </Link>
           </div>
 
           {/* Search Trigger, Auth & Primary Action */}

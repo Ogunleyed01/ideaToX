@@ -56,6 +56,7 @@ export interface UserProfileData {
   forks: Idea[];
   builds: IdeaBuild[];
   prs: FeatureRequest[];
+  starred?: Idea[];
   stats: {
     totalSpecs: number;
     totalForks: number;

@@ -83,45 +83,50 @@ export default function MarketingLandingPage() {
     }
   }, [paletteOpen]);
 
-  // Filtered command palette items
-  const commandResults = [
+  // Filtered command palette items (queries live ideas and quick platform actions)
+  const dynamicItems = liveIdeas.map((idea) => ({
+    title: idea.title,
+    desc: `${idea.difficulty.toUpperCase()} • ${idea.suggested_stack?.slice(0, 3).join(", ") || idea.category}`,
+    cat: idea.category.toUpperCase(),
+    href: `/ideas/${idea.slug}`,
+  }));
+
+  const staticNavActions = [
     {
-      title: "Autonomous Multi-Agent Router",
-      desc: "spec v1.4 • FastAPI + Redis 7.2 semantic cache",
-      cat: "Autonomous AI",
-      href: "/ideas/agent-router",
+      title: "Explore All Specifications",
+      desc: "Browse 50+ curated software blueprints and community remixes",
+      cat: "EXPLORE",
+      href: "/ideas",
     },
     {
-      title: "Distributed SQLite over Tailscale",
-      desc: "spec v0.8 • WireGuard zero-trust replica mesh",
-      cat: "Local-First",
-      href: "/ideas/sqlite-tailscale",
-    },
-    {
-      title: "Raycast Workspace Syncer",
-      desc: "spec v3.1 • Linear & GitHub bi-directional sync",
-      cat: "DevTools",
-      href: "/ideas/raycast-linear",
+      title: "Compile New Spec with AI",
+      desc: "Turn a 1-line concept into an enterprise-ready architecture spec",
+      cat: "STUDIO",
+      href: "/ideas/new",
     },
     {
       title: "3-Reel Idea Synthesizer",
       desc: "Interactive chaos constraints and telemetry simulator",
-      cat: "Studio Tool",
-      href: "#studio",
+      cat: "TOOL",
+      href: "/#studio",
     },
     {
       title: "AI Spec Sandbox",
       desc: "Compile 1-line concept into an instant architecture audit",
-      cat: "Sandbox",
-      href: "#sandbox",
+      cat: "SANDBOX",
+      href: "/#sandbox",
     },
-  ].filter((item) =>
-    paletteQuery.trim() === ""
-      ? true
-      : item.title.toLowerCase().includes(paletteQuery.toLowerCase()) ||
-        item.desc.toLowerCase().includes(paletteQuery.toLowerCase()) ||
-        item.cat.toLowerCase().includes(paletteQuery.toLowerCase())
-  );
+  ];
+
+  const commandResults = [...staticNavActions, ...dynamicItems]
+    .filter((item) =>
+      paletteQuery.trim() === ""
+        ? true
+        : item.title.toLowerCase().includes(paletteQuery.toLowerCase()) ||
+          item.desc.toLowerCase().includes(paletteQuery.toLowerCase()) ||
+          item.cat.toLowerCase().includes(paletteQuery.toLowerCase())
+    )
+    .slice(0, 8);
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#111113] selection:bg-amber-100 selection:text-amber-900 relative">

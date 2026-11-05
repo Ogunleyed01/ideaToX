@@ -304,6 +304,30 @@ export function SpecGallerySection({
             );
           })}
         </div>
+
+        {/* Full Repository Discovery Banner */}
+        <div className="mt-12 p-6 sm:p-8 rounded-[24px] bg-white border border-zinc-200/90 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-5">
+          <div className="flex items-center gap-4 text-left">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-800 font-mono text-sm font-bold shrink-0">
+              50+
+            </div>
+            <div>
+              <h4 className="font-sans font-semibold text-base text-[#111113]">
+                Looking for more project blueprints?
+              </h4>
+              <p className="text-xs text-zinc-500 mt-0.5 max-w-xl">
+                Explore our full registry of Web, Mobile, AI, Systems, and Hardware specifications with multi-filters and instant search.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/ideas"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#111113] text-white text-xs font-mono font-semibold hover:bg-zinc-800 transition-colors shrink-0 shadow-sm group"
+          >
+            <span>Browse All 50+ Specifications</span>
+            <ArrowRight size={14} className="text-amber-300 transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
       </div>
     </section>
   );
