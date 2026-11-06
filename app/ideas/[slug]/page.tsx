@@ -59,7 +59,7 @@ import { ForkModal } from "@/components/fork-modal";
 import { LineageTree } from "@/components/lineage-tree";
 import { CollaborateModal } from "@/components/collaborate-modal";
 import { SpecExportModal } from "@/components/spec-export-modal";
-import { getCurrentProfile } from "@/lib/supabase/client";
+import { getActiveUser, onAuthChange, ActiveSessionUser } from "@/lib/auth";
 
 const DIFFICULTY_CONFIG: Record<
   IdeaDifficulty,
@@ -120,6 +120,7 @@ function IdeaDetailContent() {
 
   // Maintainer view mode
   const [isOwnerView, setIsOwnerView] = useState(true);
+  const [currentUser, setCurrentUser] = useState<ActiveSessionUser | null>(null);
 
   // Feature PR submission form
   const [prActionType, setPrActionType] = useState<"add_feature" | "remove_feature">("add_feature");
@@ -165,10 +166,24 @@ function IdeaDetailContent() {
 
         const related = await getRelatedIdeas(fetchedIdea.category, fetchedIdea.slug);
         setRelatedIdeas(related);
+
+        const user = await getActiveUser();
+        setCurrentUser(user);
+        if (user && fetchedIdea.author) {
+          setIsOwnerView(user.username.toLowerCase() === fetchedIdea.author.username.toLowerCase());
+        }
       }
       setLoading(false);
     }
     loadData();
+
+    const unsub = onAuthChange((user) => {
+      setCurrentUser(user);
+      if (user && idea?.author) {
+        setIsOwnerView(user.username.toLowerCase() === idea.author.username.toLowerCase());
+      }
+    });
+    return () => unsub();
   }, [slug]);
 
   if (loading) {
@@ -269,20 +284,14 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     if (!prFeatureText.trim()) return;
 
     let proposer = undefined;
-    try {
-      const profile = await getCurrentProfile();
-      if (profile) {
-        const p = profile as any;
-        proposer = {
-          username: p.username,
-          full_name: p.full_name || p.username,
-          avatar_url: p.avatar_url || undefined,
-          reputation_score: p.reputation_score || 300,
-          badges: p.badges || ["Ideator"],
-        };
-      }
-    } catch {
-      // fallback
+    if (currentUser) {
+      proposer = {
+        username: currentUser.username,
+        full_name: currentUser.full_name || currentUser.username,
+        avatar_url: currentUser.avatar_url,
+        reputation_score: currentUser.reputation_score || 350,
+        badges: currentUser.badges || ["Ideator"],
+      };
     }
 
     const newPR = await addFeatureRequest(idea.slug, {
@@ -319,20 +328,14 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     if (!repoUrl.trim()) return;
 
     let builder = undefined;
-    try {
-      const profile = await getCurrentProfile();
-      if (profile) {
-        const p = profile as any;
-        builder = {
-          username: p.username,
-          full_name: p.full_name || p.username,
-          avatar_url: p.avatar_url || undefined,
-          reputation_score: p.reputation_score || 300,
-          badges: p.badges || ["Shipper"],
-        };
-      }
-    } catch {
-      // fallback
+    if (currentUser) {
+      builder = {
+        username: currentUser.username,
+        full_name: currentUser.full_name || currentUser.username,
+        avatar_url: currentUser.avatar_url,
+        reputation_score: currentUser.reputation_score || 350,
+        badges: currentUser.badges || ["Shipper"],
+      };
     }
 
     const res = await addIdeaBuild(idea.slug, {
@@ -364,20 +367,14 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     setIsSubmittingComment(true);
     try {
       let authorUser = undefined;
-      try {
-        const profile = await getCurrentProfile();
-        if (profile) {
-          const p = profile as any;
-          authorUser = {
-            username: p.username,
-            full_name: p.full_name || p.username,
-            avatar_url: p.avatar_url || undefined,
-            reputation_score: p.reputation_score || 300,
-            badges: p.badges || ["Ideator"],
-          };
-        }
-      } catch {
-        // fallback
+      if (currentUser) {
+        authorUser = {
+          username: currentUser.username,
+          full_name: currentUser.full_name || currentUser.username,
+          avatar_url: currentUser.avatar_url,
+          reputation_score: currentUser.reputation_score || 350,
+          badges: currentUser.badges || ["Ideator"],
+        };
       }
 
       const created = await addIdeaComment(idea.slug, text, parentId, authorUser);

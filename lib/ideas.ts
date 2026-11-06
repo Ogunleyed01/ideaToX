@@ -846,6 +846,7 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
           bio: profileData.bio || undefined,
           github_url: profileData.github_url || undefined,
           twitter_url: profileData.twitter_url || undefined,
+          discord_url: profileData.discord_url || undefined,
           website_url: profileData.website_url || undefined,
           location: profileData.location || "Global",
           joined_date: profileData.created_at
@@ -861,30 +862,42 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
   }
 
   // Find author in dbAuthor, MOCK_AUTHORS or synthesized
-  let author = dbAuthor || MOCK_AUTHORS.find(
+  let resolvedAuthor: IdeaAuthor = dbAuthor || MOCK_AUTHORS.find(
     (a) => a.username.toLowerCase() === cleanUsername
-  );
+  ) || {
+    username: cleanUsername,
+    full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).replace(/_/g, " "),
+    bio: `Software architect and open-source contributor on IdeaToX exploring real-world blueprints.`,
+    reputation_score: 420,
+    badges: ["Ideator"],
+    joined_date: "Recent Builder",
+    location: "Global",
+  };
 
-  if (!author) {
+  if (!dbAuthor && !MOCK_AUTHORS.some((a) => a.username.toLowerCase() === cleanUsername)) {
     // Check if any idea was created by this author
     const ideaByAuthor = memoryIdeas.find(
       (i) => i.author?.username.toLowerCase() === cleanUsername
     );
     if (ideaByAuthor && ideaByAuthor.author) {
-      author = ideaByAuthor.author;
-    } else {
-      // Dynamic profile fallback
-      author = {
-        username: cleanUsername,
-        full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).replace(/_/g, " "),
-        bio: `Software architect and open-source contributor on IdeaToX exploring real-world blueprints.`,
-        reputation_score: 420,
-        badges: ["Ideator"],
-        joined_date: "Recent Builder",
-        location: "Global",
-      };
+      resolvedAuthor = ideaByAuthor.author;
     }
   }
+
+  // Merge any local client overrides
+  if (typeof window !== "undefined") {
+    try {
+      const rawOverrides = localStorage.getItem(`ideatox_profile_overrides_${cleanUsername}`);
+      if (rawOverrides) {
+        const overrides = JSON.parse(rawOverrides);
+        resolvedAuthor = { ...resolvedAuthor, ...overrides, username: cleanUsername };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const author: IdeaAuthor = resolvedAuthor;
 
   // Filter ideas authored by this user
   const authoredIdeas = memoryIdeas.filter(
@@ -1028,3 +1041,73 @@ export async function reviewCollaborationRequest(
         : `Declined collaboration pitch from @${req.applicant.username}.`,
   };
 }
+
+// -------------------------------------------------------------
+// MILESTONE 11: USER PROFILE MANAGEMENT & CONTACT LINKS
+// -------------------------------------------------------------
+export async function updateUserProfile(
+  username: string,
+  updates: Partial<IdeaAuthor>
+): Promise<{ success: boolean; author: IdeaAuthor | null; message: string }> {
+  const cleanUsername = username.toLowerCase().trim();
+
+  // 1. Update in-memory MOCK_AUTHORS if found
+  const mockIdx = MOCK_AUTHORS.findIndex((a) => a.username.toLowerCase() === cleanUsername);
+  if (mockIdx !== -1) {
+    MOCK_AUTHORS[mockIdx] = { ...MOCK_AUTHORS[mockIdx], ...updates };
+  }
+
+  // 2. Update memory ideas authored by this user
+  memoryIdeas.forEach((idea) => {
+    if (idea.author?.username.toLowerCase() === cleanUsername) {
+      idea.author = { ...idea.author, ...updates };
+    }
+  });
+
+  // 3. Save to localStorage overrides so it persists across client reloads
+  if (typeof window !== "undefined") {
+    try {
+      const existingRaw = localStorage.getItem(`ideatox_profile_overrides_${cleanUsername}`);
+      const existing = existingRaw ? JSON.parse(existingRaw) : {};
+      const merged = { ...existing, ...updates };
+      localStorage.setItem(`ideatox_profile_overrides_${cleanUsername}`, JSON.stringify(merged));
+      window.dispatchEvent(new CustomEvent("ideatox_profile_updated", { detail: { username: cleanUsername, profile: merged } }));
+      window.dispatchEvent(new CustomEvent("ideatox_auth_changed", { detail: { username: cleanUsername } }));
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Update Supabase if configured and authenticated
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await (supabase as any)
+          .from("profiles")
+          .update({
+            full_name: updates.full_name,
+            bio: updates.bio,
+            location: updates.location,
+            github_url: updates.github_url,
+            twitter_url: updates.twitter_url,
+            discord_url: updates.discord_url,
+            website_url: updates.website_url,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const updatedProfile = await getUserProfile(cleanUsername);
+  return {
+    success: true,
+    author: updatedProfile?.author || null,
+    message: "Profile and contact handles updated successfully!",
+  };
+}
+

@@ -82,4 +82,20 @@
 ## Milestone 10: AI Coding Agent Exporter & GitHub PRD Tooling (Completed)
 - [x] **Task 10.1:** Build **"Export for AI Coding Agents" Modal** on `/ideas/[slug]`:
   - 1-click optimized system prompts for **Cursor**, **Windsurf**, **Antigravity**, and **Claude Code** including architectural constraints, stack rules, and checkable MVP milestones.
-  - 1-click **GitHub Issue / PRD Markdown** download and copy button.
+  - 1-click **GitHub Issue / PRD Markdown** download and copy button.
+
+## Milestone 11: Multi-Path Authentication, Persona Switcher & Profile Management (Completed)
+- [x] **Task 11.1:** Complete multi-path authentication architecture (`lib/auth.ts`, `components/auth-modal.tsx`):
+  - Passwordless Magic Link (OTP) sign-in for zero-credential Supabase instances.
+  - Email + Password registration and sign-in.
+  - Fast OAuth with GitHub & Google.
+  - 1-click Sandbox Persona Quick-Switcher (`@you_builder`, `@adebayo_codes`, `@sarah_systems`, `@maboroshi_io`, `@elena_arch`) for local-first testing of both author (maintainer) and contributor perspectives.
+- [x] **Task 11.2:** Dynamic Island Navigation User HUD (`components/floating-navbar.tsx`):
+  - Live session badge (Supabase Live vs Local Sandbox).
+  - Floating account menu with user profile link, spec draft shortcut, persona switcher, and 1-click Sign Out.
+- [x] **Task 11.3:** User Profile Editing & External Contact Channels (`components/edit-profile-modal.tsx`, `app/profile/[username]/page.tsx`):
+  - Edit full name, bio, location, GitHub, X (Twitter), Discord, and Website URL.
+  - Instant synchronization between local client cache and Supabase PostgreSQL `profiles` table.
+- [x] **Task 11.4:** Session-aware idea attribution and collaboration actions:
+  - New ideas (`/ideas/new`), feature PRs, shipped builds, comments, and collaboration pitches automatically bind to the active session user or chosen sandbox persona.
+

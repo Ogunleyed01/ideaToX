@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Idea } from "@/types/idea";
 import { addCollaborationRequest } from "@/lib/ideas";
-import { getCurrentProfile } from "@/lib/supabase/client";
+import { getActiveUser } from "@/lib/auth";
 
 interface CollaborateModalProps {
   idea: Idea;
@@ -71,14 +71,14 @@ export function CollaborateModal({
     setIsSubmitting(true);
     try {
       let applicant = undefined;
-      const profile = await getCurrentProfile();
-      if (profile) {
+      const activeUser = await getActiveUser();
+      if (activeUser) {
         applicant = {
-          username: profile.username,
-          full_name: profile.full_name || profile.username,
-          avatar_url: profile.avatar_url || undefined,
-          reputation_score: profile.reputation_score || 300,
-          badges: profile.badges || ["Ideator"],
+          username: activeUser.username,
+          full_name: activeUser.full_name || activeUser.username,
+          avatar_url: activeUser.avatar_url || undefined,
+          reputation_score: activeUser.reputation_score || 350,
+          badges: activeUser.badges || ["Ideator"],
         };
       }
 

@@ -25,12 +25,19 @@ import {
   Layers,
   CheckCircle2,
   ArrowRight,
+  Edit3,
+  LogOut,
+  MessageSquare,
+  KeyRound,
 } from "lucide-react";
 import { getUserProfile } from "@/lib/ideas";
 import { UserProfileData, Idea } from "@/types/idea";
 import { IdeaCard } from "@/components/idea-card";
 import { ForkModal } from "@/components/fork-modal";
 import { ObsidianMegaFooter } from "@/components/obsidian-mega-footer";
+import { EditProfileModal } from "@/components/edit-profile-modal";
+import { AuthModal } from "@/components/auth-modal";
+import { getActiveUser, onAuthChange, signOutUser, ActiveSessionUser } from "@/lib/auth";
 
 function UserProfileContent() {
   const params = useParams();
@@ -46,6 +53,20 @@ function UserProfileContent() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Auth & Profile Edit States
+  const [currentUser, setCurrentUser] = useState<ActiveSessionUser | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authInitialTab, setAuthInitialTab] = useState<"magic_link" | "password" | "oauth" | "sandbox">("sandbox");
+
+  useEffect(() => {
+    getActiveUser().then(setCurrentUser);
+    const unsub = onAuthChange((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     async function loadProfile() {
       if (!username) return;
@@ -55,7 +76,26 @@ function UserProfileContent() {
       setLoading(false);
     }
     loadProfile();
+
+    const handleProfileUpdate = () => {
+      if (username) {
+        getUserProfile(username).then(setProfile);
+      }
+    };
+    window.addEventListener("ideatox_profile_updated", handleProfileUpdate);
+    return () => window.removeEventListener("ideatox_profile_updated", handleProfileUpdate);
   }, [username]);
+
+  const isOwnProfile = Boolean(
+    currentUser && currentUser.username.toLowerCase() === username.toLowerCase()
+  );
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setCurrentUser(null);
+    setToastMessage("Signed out of developer passport.");
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   const handleShare = () => {
     if (typeof window !== "undefined") {
@@ -126,14 +166,66 @@ function UserProfileContent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {isOwnProfile ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-800 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                <span className="hidden sm:inline">EDIT PROFILE</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthInitialTab("sandbox");
+                  setAuthModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+                title="Switch active persona"
+              >
+                <Terminal className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="hidden sm:inline">SWITCH</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+                title="Sign Out of Passport"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">SIGN OUT</span>
+              </button>
+            </>
+          ) : (
+            <>
+              {!currentUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthInitialTab("magic_link");
+                    setAuthModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-amber-700" />
+                  <span className="hidden sm:inline">SIGN IN</span>
+                </button>
+              )}
+            </>
+          )}
+
           <button
             type="button"
             onClick={handleShare}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
           >
             {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5 text-zinc-500" />}
-            <span className="hidden sm:inline">{copiedLink ? "COPIED" : "SHARE PROFILE"}</span>
+            <span className="hidden sm:inline">{copiedLink ? "COPIED" : "SHARE"}</span>
           </button>
 
           <Link
@@ -241,6 +333,15 @@ function UserProfileContent() {
                   <ExternalLink className="w-3 h-3 text-zinc-400" />
                 </a>
               )}
+              {author.discord_url && (
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 text-indigo-700 text-xs font-mono font-medium transition-colors border border-indigo-200/80"
+                  title={`Discord: ${author.discord_url}`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{author.discord_url}</span>
+                </div>
+              )}
               {author.website_url && (
                 <a
                   href={author.website_url}
@@ -252,6 +353,16 @@ function UserProfileContent() {
                   <span>Website</span>
                   <ExternalLink className="w-3 h-3 text-zinc-400" />
                 </a>
+              )}
+              {isOwnProfile && (!author.github_url || !author.twitter_url || !author.discord_url || !author.website_url) && (
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-mono font-semibold transition-colors border border-amber-200/90 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3 text-amber-700" />
+                  <span>+ Handles</span>
+                </button>
               )}
             </div>
           </div>
@@ -710,6 +821,31 @@ function UserProfileContent() {
           onClose={() => setForkModalIdea(null)}
         />
       )}
+
+      {/* =========================================================================
+          EDIT PROFILE MODAL
+         ========================================================================= */}
+      {profile && (
+        <EditProfileModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          author={profile.author}
+          onProfileUpdated={(updatedAuthor) => {
+            setProfile((prev) => (prev ? { ...prev, author: updatedAuthor } : null));
+            setToastMessage("Profile metadata updated successfully!");
+            setTimeout(() => setToastMessage(null), 3000);
+          }}
+        />
+      )}
+
+      {/* =========================================================================
+          AUTH & PERSONA SWITCHER MODAL
+         ========================================================================= */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialTab={authInitialTab}
+      />
 
       {/* =========================================================================
           TOAST NOTIFICATION

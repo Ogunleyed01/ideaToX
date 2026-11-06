@@ -21,6 +21,7 @@ import { z } from "zod";
 import { Idea, IdeaAuthor, IdeaCategory, IdeaDifficulty, CollabStatus } from "@/types/idea";
 import { getIdeaBySlug, saveNewIdea } from "@/lib/ideas";
 import { getCurrentProfile } from "@/lib/supabase/client";
+import { getActiveUser } from "@/lib/auth";
 
 const IdeaSubmissionSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(80, "Title is too long"),
@@ -209,19 +210,26 @@ function NewIdeaFormContent() {
         .slice(0, 50) + `-${Math.random().toString(36).substring(2, 6)}`;
 
     let authorInfo: IdeaAuthor = {
-      username: "you_founder",
-      full_name: "Technical Author",
-      reputation_score: 150,
+      username: "you_builder",
+      full_name: "Active Builder",
+      reputation_score: 420,
     };
 
     try {
-      const liveProfile = await getCurrentProfile();
-      if (liveProfile) {
+      const activeUser = await getActiveUser();
+      if (activeUser) {
         authorInfo = {
-          username: liveProfile.username,
-          full_name: liveProfile.full_name || liveProfile.username,
-          avatar_url: liveProfile.avatar_url || undefined,
-          reputation_score: liveProfile.reputation_score || 300,
+          username: activeUser.username,
+          full_name: activeUser.full_name || activeUser.username,
+          avatar_url: activeUser.avatar_url || undefined,
+          bio: activeUser.bio || undefined,
+          github_url: activeUser.github_url || undefined,
+          twitter_url: activeUser.twitter_url || undefined,
+          discord_url: activeUser.discord_url || undefined,
+          website_url: activeUser.website_url || undefined,
+          location: activeUser.location || "Global",
+          reputation_score: activeUser.reputation_score || 400,
+          badges: activeUser.badges || ["Ideator"],
         };
       }
     } catch {
