@@ -116,7 +116,8 @@ export function ObsidianMegaFooter() {
               <li><a href="/ideas#prs" className="hover:text-white transition-colors">Active Feature PRs</a></li>
               <li><a href="/ideas" className="hover:text-white transition-colors">Lineage Graph Trees</a></li>
               <li><Link href="/ideas/new" className="hover:text-white transition-colors">Publish a Blueprint</Link></li>
-              <li><Link href="/about" className="hover:text-white transition-colors">About & Manifesto</Link></li>
+              <li><Link href="/about" className="hover:text-white transition-colors">About &amp; Manifesto</Link></li>
+              <li><Link href="/settings" className="hover:text-white transition-colors">Developer Settings</Link></li>
             </ul>
           </div>
         </div>

@@ -2,21 +2,36 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getActiveUser } from "@/lib/auth";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
 
 export default function ProfileIndexPage() {
   const router = useRouter();
 
   useEffect(() => {
     async function checkUser() {
-      try {
-        const activeUser = await getActiveUser();
-        if (activeUser?.username) {
-          router.replace(`/profile/${activeUser.username}`);
-          return;
+      if (isSupabaseConfigured()) {
+        try {
+          const supabase = createClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (user) {
+            const { data } = await supabase
+              .from("profiles")
+              .select("username")
+              .eq("id", user.id)
+              .maybeSingle();
+
+            const profile = data as any;
+            if (profile?.username) {
+              router.replace(`/profile/${profile.username}`);
+              return;
+            }
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // fallback
       }
       router.replace("/profile/you_builder");
     }

@@ -1,22 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  Search,
-  Sparkles,
-  ArrowRight,
-  User,
-  LogIn,
-  LogOut,
-  ChevronDown,
-  Terminal,
-  ShieldCheck,
-  PlusCircle,
-  Award,
-} from "lucide-react";
+import { Search, ArrowRight, User, LogIn, Bell, Settings } from "lucide-react";
 import { AuthModal } from "@/components/auth-modal";
-import { getActiveUser, onAuthChange, signOutUser, ActiveSessionUser } from "@/lib/auth";
+import { NotificationDrawer } from "@/components/notification-drawer";
+import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
+import {
+  getNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  resetNotifications,
+  subscribeNotifications,
+} from "@/lib/ideas";
+import { IdeaNotification } from "@/types/idea";
 
 interface FloatingNavbarProps {
   onOpenSearch: () => void;
@@ -25,11 +22,9 @@ interface FloatingNavbarProps {
 export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authInitialTab, setAuthInitialTab] = useState<"magic_link" | "password" | "oauth" | "sandbox">("magic_link");
-  const [user, setUser] = useState<ActiveSessionUser | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
+  const [notifications, setNotifications] = useState<IdeaNotification[]>([]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,46 +34,42 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Subscribe to real-time auth and persona changes
   useEffect(() => {
-    getActiveUser().then(setUser);
-    const unsubscribe = onAuthChange((updatedUser) => {
-      setUser(updatedUser);
+    setNotifications(getNotifications());
+    return subscribeNotifications(() => {
+      setNotifications(getNotifications());
     });
-    return () => unsubscribe();
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = createClient();
+        supabase.auth.getUser().then(({ data }) => {
+          if (data?.user) setUser(data.user);
+        });
+
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
+          setUser(session?.user ?? null);
+        });
+
+        return () => subscription.unsubscribe();
+      } catch {
+        // ignore in local offline mode
       }
-    };
-    if (menuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
     }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [menuOpen]);
+  }, []);
 
-  const handleSignOut = async () => {
-    setMenuOpen(false);
-    await signOutUser();
-    setUser(null);
-  };
-
-  const handleOpenSandboxSwitcher = () => {
-    setMenuOpen(false);
-    setAuthInitialTab("sandbox");
-    setAuthModalOpen(true);
-  };
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <>
-      <header className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 pointer-events-none">
+      <header className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 pointer-events-none">
         <nav
           aria-label="Dynamic Island Navigation"
-          className={`pointer-events-auto w-full h-12 px-3.5 rounded-full bg-[#111113] text-white border border-white/[0.12] flex items-center justify-between transition-all duration-300 ${
+          className={`pointer-events-auto w-full h-12 px-3.5 rounded-full bg-[#111113] text-white border border-white/[0.12] flex items-center justify-between gap-2 transition-all duration-300 ${
             scrolled
               ? "shadow-[0_16px_40px_-10px_rgba(0,0,0,0.45)] backdrop-blur-2xl bg-[#111113]/95"
               : "shadow-[0_12px_32px_-8px_rgba(0,0,0,0.3)] backdrop-blur-xl"
@@ -99,7 +90,7 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
           </Link>
 
           {/* Quick Links */}
-          <div className="hidden sm:flex items-center gap-1 text-[13px] text-zinc-300 font-medium">
+          <div className="hidden sm:flex items-center gap-0.5 text-[13px] text-zinc-300 font-medium">
             <Link
               href="/ideas"
               className="px-2.5 py-1 rounded-full hover:text-white hover:bg-white/[0.08] transition-colors flex items-center gap-1"
@@ -129,8 +120,8 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
             </Link>
           </div>
 
-          {/* Search Trigger, Auth & Primary Action */}
-          <div className="flex items-center gap-1.5 shrink-0 relative" ref={menuRef}>
+          {/* Search, Builder Inbox, Settings, Auth & Primary Action */}
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={onOpenSearch}
               type="button"
@@ -141,125 +132,54 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
               <Search size={14} />
             </button>
 
+            <button
+              onClick={() => setInboxOpen(true)}
+              type="button"
+              className="relative w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Builder Inbox Notifications"
+              aria-label="Open Builder Inbox Notifications"
+            >
+              <Bell size={14} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-amber-400 text-[#0D0E12] font-mono text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            <Link
+              href="/settings"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="Developer Profile Settings"
+              aria-label="Developer Profile Settings"
+            >
+              <Settings size={14} />
+            </Link>
+
             {user ? (
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen((prev) => !prev)}
-                  className="flex items-center gap-1 pl-1 pr-1.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer border border-white/10"
-                  title={`Logged in as @${user.username}`}
-                  aria-label="Open User HUD"
-                >
-                  <div className="w-5 h-5 rounded-full bg-[#0D0E12] overflow-hidden flex items-center justify-center font-bold text-[10px] text-white">
-                    {user.avatar_url ? (
-                      <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <span>{user.username.slice(0, 1).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      user.is_sandbox ? "bg-amber-400" : "bg-emerald-400"
-                    }`}
-                  />
-                  <ChevronDown size={11} className={`text-zinc-400 transition-transform ${menuOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {/* USER HUD DROPDOWN */}
-                {menuOpen && (
-                  <div className="pointer-events-auto absolute right-0 top-10 w-64 rounded-2xl bg-[#0D0E12] text-white border border-white/[0.14] shadow-2xl p-3 space-y-2 animate-scaleUp z-50">
-                    {/* User Info Header */}
-                    <div className="p-2 rounded-xl bg-white/[0.05] border border-white/[0.06] flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-white/10 overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-amber-300">
-                        {user.avatar_url ? (
-                          <img src={user.avatar_url} alt={user.username} className="w-full h-full object-cover" />
-                        ) : (
-                          <span>{user.username.slice(0, 2).toUpperCase()}</span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-sans font-bold text-xs truncate">
-                            {user.full_name || user.username}
-                          </span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-amber-400/20 text-amber-300 font-semibold shrink-0">
-                            {user.reputation_score || 350} rep
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[11px] text-zinc-400 truncate">
-                            @{user.username}
-                          </span>
-                          <span className="text-[9px] font-mono uppercase px-1 rounded bg-white/10 text-zinc-300">
-                            {user.is_sandbox ? "Sandbox" : "Supabase"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Navigation Actions */}
-                    <div className="space-y-0.5 pt-1 text-xs font-sans">
-                      <Link
-                        href={`/profile/${user.username}`}
-                        onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/[0.08] text-zinc-300 hover:text-white transition-colors"
-                      >
-                        <User size={13} className="text-amber-300" />
-                        <span>My Telemetry Profile</span>
-                      </Link>
-
-                      <Link
-                        href="/ideas/new"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/[0.08] text-zinc-300 hover:text-white transition-colors"
-                      >
-                        <PlusCircle size={13} className="text-zinc-400" />
-                        <span>Draft Specification</span>
-                      </Link>
-
-                      <button
-                        type="button"
-                        onClick={handleOpenSandboxSwitcher}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/[0.08] text-zinc-300 hover:text-white transition-colors text-left cursor-pointer"
-                      >
-                        <Terminal size={13} className="text-zinc-400" />
-                        <span>Switch Persona</span>
-                      </button>
-                    </div>
-
-                    {/* Divider & Sign Out */}
-                    <div className="pt-1 border-t border-white/[0.08]">
-                      <button
-                        type="button"
-                        onClick={handleSignOut}
-                        className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 text-xs font-sans transition-colors text-left cursor-pointer"
-                      >
-                        <LogOut size={13} />
-                        <span>Sign Out of Passport</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Link
+                href="/profile"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-amber-300 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                title="My Profile"
+                aria-label="My Profile"
+              >
+                <User size={14} />
+              </Link>
             ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setAuthInitialTab("magic_link");
-                  setAuthModalOpen(true);
-                }}
-                className="h-7 px-2 rounded-full flex items-center gap-1.5 text-zinc-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer text-xs font-mono font-medium"
+                onClick={() => setAuthModalOpen(true)}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 title="Developer Sign In"
                 aria-label="Developer Sign In"
               >
-                <LogIn size={13} className="text-amber-300" />
-                <span className="hidden sm:inline">Passport</span>
+                <LogIn size={14} />
               </button>
             )}
 
             <Link
               href="/ideas/new"
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white text-[#111113] text-xs font-semibold hover:bg-amber-200 transition-colors shadow-sm group"
+              className="inline-flex items-center gap-1.5 h-8 px-3 ml-0.5 rounded-full bg-white text-[#111113] text-xs font-semibold hover:bg-amber-200 transition-colors shadow-sm group"
             >
               <span>Ideate</span>
               <ArrowRight
@@ -271,11 +191,20 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
         </nav>
       </header>
 
+      {/* Builder Inbox Notification Drawer */}
+      <NotificationDrawer
+        isOpen={inboxOpen}
+        onClose={() => setInboxOpen(false)}
+        notifications={notifications}
+        onMarkRead={(id) => setNotifications(markNotificationRead(id))}
+        onMarkAllRead={() => setNotifications(markAllNotificationsRead())}
+        onResetDemo={() => setNotifications(resetNotifications())}
+      />
+
       {/* Auth Modal */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
-        initialTab={authInitialTab}
       />
     </>
   );

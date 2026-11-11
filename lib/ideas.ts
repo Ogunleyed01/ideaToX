@@ -1,6 +1,17 @@
 import seedIdeasRaw from "@/data/seed-ideas.json";
-import { Idea, IdeaAuthor, FeatureRequest, IdeaBuild, IdeaComment, UserProfileData, CollaborationRequest } from "@/types/idea";
-import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
+import {
+  Idea,
+  IdeaAuthor,
+  FeatureRequest,
+  IdeaBuild,
+  IdeaComment,
+  UserProfileData,
+  CollaborationRequest,
+  IdeaNotification,
+  NotificationType,
+  IdeaDetailTab,
+} from "@/types/idea";
+import { isSupabaseConfigured, createClient, getCurrentProfile } from "@/lib/supabase/client";
 
 export const MOCK_AUTHORS: IdeaAuthor[] = [
   {
@@ -56,10 +67,16 @@ export const MOCK_AUTHORS: IdeaAuthor[] = [
   {
     username: "you_builder",
     full_name: "You (Active Builder)",
+    headline: "Full-Stack Product & Systems Architect",
     avatar_url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
     bio: "Full-Stack builder & active IdeaToX contributor exploring high-leverage software architectures and production apps.",
-    github_url: "https://github.com",
-    twitter_url: "https://x.com",
+    email: "builder@ideatox.dev",
+    availability: "Open to Co-Founding",
+    preferred_stack: ["Next.js", "TypeScript", "Supabase", "Tailwind CSS", "Rust"],
+    github_url: "https://github.com/you-builder",
+    twitter_url: "https://x.com/you_builder",
+    discord_url: "you_builder#0402",
+    website_url: "https://ideatox.dev",
     location: "Global",
     joined_date: "April 2026",
     reputation_score: 520,
@@ -273,7 +290,24 @@ export function saveNewIdea(newIdea: Idea): Idea {
     }
   }
 
-  memoryIdeas = [newIdea, ...memoryIdeas];
+  const enrichedIdea: Idea = {
+    ...newIdea,
+    author: newIdea.author || getCurrentActorAuthor(),
+  };
+
+  memoryIdeas = [enrichedIdea, ...memoryIdeas];
+
+  if (enrichedIdea.parent_slug) {
+    addNotification({
+      type: "fork",
+      title: `Forked "${enrichedIdea.title}"`,
+      message: `Published a new remix branch from @${enrichedIdea.parent_slug}.`,
+      idea_slug: enrichedIdea.slug,
+      idea_title: enrichedIdea.title,
+      actor: enrichedIdea.author,
+      target_tab: "lineage",
+    });
+  }
 
   // If Supabase is configured, sync to Supabase
   if (isSupabaseConfigured()) {
@@ -394,6 +428,18 @@ export async function toggleUpvote(
     }
   }
 
+  if (newStarred && idea) {
+    addNotification({
+      type: "star",
+      title: `Starred "${idea.title}"`,
+      message: `Added blueprint to your starred collection (${newCount} total stars).`,
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      target_tab: "spec",
+      read: true,
+    });
+  }
+
   return {
     starred: newStarred,
     upvotes_count: newCount,
@@ -419,11 +465,7 @@ export async function addFeatureRequest(
   const newPR: FeatureRequest = {
     id: `pr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     idea_id: idea.slug,
-    proposer: req.proposer || {
-      username: "you_builder",
-      full_name: "Current Contributor",
-      reputation_score: 110,
-    },
+    proposer: req.proposer || getCurrentActorAuthor(),
     action_type: req.action_type,
     feature_text: req.feature_text.trim(),
     rationale: req.rationale?.trim() || "Proposed to improve MVP architectural scope.",
@@ -432,6 +474,16 @@ export async function addFeatureRequest(
   };
 
   idea.feature_requests = [newPR, ...(idea.feature_requests || [])];
+
+  addNotification({
+    type: "pr",
+    title: `Feature PR Opened on "${idea.title}"`,
+    message: `${req.action_type === "add_feature" ? "+ Add" : "- Trim"}: ${newPR.feature_text}`,
+    idea_slug: idea.slug,
+    idea_title: idea.title,
+    actor: newPR.proposer,
+    target_tab: "prs",
+  });
 
   if (isSupabaseConfigured() && idea?.id) {
     try {
@@ -531,11 +583,7 @@ export async function addIdeaBuild(
   const newBuild: IdeaBuild = {
     id: `build-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     idea_id: idea.slug,
-    builder: buildData.builder || {
-      username: "you_builder",
-      full_name: "Community Builder",
-      reputation_score: 130,
-    },
+    builder: buildData.builder || getCurrentActorAuthor(),
     status: buildData.status || (buildData.live_url ? "shipped" : "building"),
     repo_url: buildData.repo_url.trim(),
     live_url: buildData.live_url?.trim() || undefined,
@@ -545,6 +593,16 @@ export async function addIdeaBuild(
 
   idea.builds = [newBuild, ...(idea.builds || [])];
   idea.builds_count = (idea.builds_count || 0) + 1;
+
+  addNotification({
+    type: "build",
+    title: `${newBuild.status === "shipped" ? "Shipped Demo" : "Build Linked"}: "${idea.title}"`,
+    message: newBuild.notes || `Linked implementation repo ${newBuild.repo_url}.`,
+    idea_slug: idea.slug,
+    idea_title: idea.title,
+    actor: newBuild.builder,
+    target_tab: "builds",
+  });
 
   if (isSupabaseConfigured() && idea?.id) {
     try {
@@ -723,12 +781,7 @@ export async function createQuickFork(
     builds_count: 0,
     is_seeded: false,
     created_at: new Date().toISOString(),
-    author: {
-      username: "you_builder",
-      full_name: "You (Fork Author)",
-      avatar_url: undefined,
-      reputation_score: 160,
-    },
+    author: getCurrentActorAuthor(),
     feature_requests: [],
     builds: [],
   };
@@ -759,12 +812,7 @@ export async function addIdeaComment(
   const newComment: IdeaComment = {
     id: `c-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     idea_id: idea.slug,
-    user: user || MOCK_AUTHORS.find((a) => a.username === "you_builder") || {
-      username: "you_builder",
-      full_name: "You (Active Builder)",
-      reputation_score: 520,
-      badges: ["Ideator", "Remixer", "Shipper"],
-    },
+    user: user || getCurrentActorAuthor(),
     content: content.trim(),
     created_at: "Just now",
     parent_comment_id: parentCommentId || null,
@@ -773,6 +821,16 @@ export async function addIdeaComment(
   };
 
   idea.comments = [...(idea.comments || []), newComment];
+
+  addNotification({
+    type: "comment",
+    title: `${parentCommentId ? "Reply Posted" : "Discussion Note"} on "${idea.title}"`,
+    message: newComment.content.slice(0, 110),
+    idea_slug: idea.slug,
+    idea_title: idea.title,
+    actor: newComment.user,
+    target_tab: "discussions",
+  });
 
   if (isSupabaseConfigured() && idea.id) {
     try {
@@ -846,7 +904,6 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
           bio: profileData.bio || undefined,
           github_url: profileData.github_url || undefined,
           twitter_url: profileData.twitter_url || undefined,
-          discord_url: profileData.discord_url || undefined,
           website_url: profileData.website_url || undefined,
           location: profileData.location || "Global",
           joined_date: profileData.created_at
@@ -862,42 +919,32 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
   }
 
   // Find author in dbAuthor, MOCK_AUTHORS or synthesized
-  let resolvedAuthor: IdeaAuthor = dbAuthor || MOCK_AUTHORS.find(
+  let author = dbAuthor || MOCK_AUTHORS.find(
     (a) => a.username.toLowerCase() === cleanUsername
-  ) || {
-    username: cleanUsername,
-    full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).replace(/_/g, " "),
-    bio: `Software architect and open-source contributor on IdeaToX exploring real-world blueprints.`,
-    reputation_score: 420,
-    badges: ["Ideator"],
-    joined_date: "Recent Builder",
-    location: "Global",
-  };
+  );
 
-  if (!dbAuthor && !MOCK_AUTHORS.some((a) => a.username.toLowerCase() === cleanUsername)) {
+  if (!author) {
     // Check if any idea was created by this author
     const ideaByAuthor = memoryIdeas.find(
       (i) => i.author?.username.toLowerCase() === cleanUsername
     );
     if (ideaByAuthor && ideaByAuthor.author) {
-      resolvedAuthor = ideaByAuthor.author;
+      author = ideaByAuthor.author;
+    } else {
+      // Dynamic profile fallback
+      author = {
+        username: cleanUsername,
+        full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).replace(/_/g, " "),
+        bio: `Software architect and open-source contributor on IdeaToX exploring real-world blueprints.`,
+        reputation_score: 420,
+        badges: ["Ideator"],
+        joined_date: "Recent Builder",
+        location: "Global",
+      };
     }
   }
 
-  // Merge any local client overrides
-  if (typeof window !== "undefined") {
-    try {
-      const rawOverrides = localStorage.getItem(`ideatox_profile_overrides_${cleanUsername}`);
-      if (rawOverrides) {
-        const overrides = JSON.parse(rawOverrides);
-        resolvedAuthor = { ...resolvedAuthor, ...overrides, username: cleanUsername };
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const author: IdeaAuthor = resolvedAuthor;
+  author = applyProfileOverrides(author);
 
   // Filter ideas authored by this user
   const authoredIdeas = memoryIdeas.filter(
@@ -994,11 +1041,7 @@ export async function addCollaborationRequest(
   const newCollab: CollaborationRequest = {
     id: `collab-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     idea_id: idea.slug,
-    applicant: req.applicant || {
-      username: "you_builder",
-      full_name: "Interested Collaborator",
-      reputation_score: 180,
-    },
+    applicant: req.applicant || getCurrentActorAuthor(),
     role: req.role,
     contact_handle: req.contact_handle,
     availability: req.availability,
@@ -1008,6 +1051,17 @@ export async function addCollaborationRequest(
   };
 
   idea.collaboration_requests = [newCollab, ...(idea.collaboration_requests || [])];
+
+  addNotification({
+    type: "collab",
+    title: `Collaboration Pitch on "${idea.title}"`,
+    message: `Applied for ${newCollab.role} (${newCollab.availability}) • ${newCollab.pitch.slice(0, 80)}`,
+    idea_slug: idea.slug,
+    idea_title: idea.title,
+    actor: newCollab.applicant,
+    target_tab: "team",
+  });
+
   return newCollab;
 }
 
@@ -1043,71 +1097,364 @@ export async function reviewCollaborationRequest(
 }
 
 // -------------------------------------------------------------
-// MILESTONE 11: USER PROFILE MANAGEMENT & CONTACT LINKS
+// MILESTONE 11: DEVELOPER PROFILE SETTINGS & BUILDER INBOX
 // -------------------------------------------------------------
-export async function updateUserProfile(
-  username: string,
-  updates: Partial<IdeaAuthor>
-): Promise<{ success: boolean; author: IdeaAuthor | null; message: string }> {
-  const cleanUsername = username.toLowerCase().trim();
+const STORAGE_KEY_PROFILE_OVERRIDES = "ideatox_profile_overrides";
+const STORAGE_KEY_NOTIFICATIONS = "ideatox_builder_notifications";
+const EVENT_PROFILE_UPDATED = "ideatox:profile-updated";
+const EVENT_NOTIFICATIONS_UPDATED = "ideatox:notifications-updated";
 
-  // 1. Update in-memory MOCK_AUTHORS if found
-  const mockIdx = MOCK_AUTHORS.findIndex((a) => a.username.toLowerCase() === cleanUsername);
-  if (mockIdx !== -1) {
-    MOCK_AUTHORS[mockIdx] = { ...MOCK_AUTHORS[mockIdx], ...updates };
+let memoryProfileOverrides: Record<string, Partial<IdeaAuthor>> = {};
+let memoryNotifications: IdeaNotification[] | null = null;
+
+function emitBrowserEvent(eventName: string): void {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(eventName));
   }
+}
 
-  // 2. Update memory ideas authored by this user
-  memoryIdeas.forEach((idea) => {
-    if (idea.author?.username.toLowerCase() === cleanUsername) {
-      idea.author = { ...idea.author, ...updates };
-    }
-  });
-
-  // 3. Save to localStorage overrides so it persists across client reloads
+function readProfileOverrides(): Record<string, Partial<IdeaAuthor>> {
   if (typeof window !== "undefined") {
     try {
-      const existingRaw = localStorage.getItem(`ideatox_profile_overrides_${cleanUsername}`);
-      const existing = existingRaw ? JSON.parse(existingRaw) : {};
-      const merged = { ...existing, ...updates };
-      localStorage.setItem(`ideatox_profile_overrides_${cleanUsername}`, JSON.stringify(merged));
-      window.dispatchEvent(new CustomEvent("ideatox_profile_updated", { detail: { username: cleanUsername, profile: merged } }));
-      window.dispatchEvent(new CustomEvent("ideatox_auth_changed", { detail: { username: cleanUsername } }));
+      const raw = localStorage.getItem(STORAGE_KEY_PROFILE_OVERRIDES);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, Partial<IdeaAuthor>>;
+        memoryProfileOverrides = parsed;
+        return parsed;
+      }
     } catch {
-      // ignore
+      // ignore malformed storage
+    }
+  }
+  return memoryProfileOverrides;
+}
+
+function writeProfileOverrides(overrides: Record<string, Partial<IdeaAuthor>>): void {
+  memoryProfileOverrides = overrides;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY_PROFILE_OVERRIDES, JSON.stringify(overrides));
+    } catch {
+      // ignore quota errors
+    }
+  }
+  emitBrowserEvent(EVENT_PROFILE_UPDATED);
+}
+
+export function applyProfileOverrides(author: IdeaAuthor): IdeaAuthor {
+  const key = author.username.toLowerCase();
+  const overrides = readProfileOverrides();
+  const patch = overrides[key];
+  if (!patch) return author;
+  return {
+    ...author,
+    ...patch,
+    username: author.username,
+  };
+}
+
+export function getCurrentActorAuthor(): IdeaAuthor {
+  const base =
+    MOCK_AUTHORS.find((a) => a.username === "you_builder") || MOCK_AUTHORS[MOCK_AUTHORS.length - 1];
+  return applyProfileOverrides(base);
+}
+
+export async function getActiveBuilderProfile(username?: string): Promise<IdeaAuthor> {
+  const target = (username || "you_builder").toLowerCase().replace(/^@/, "").trim();
+  let baseAuthor: IdeaAuthor | undefined;
+
+  if (isSupabaseConfigured()) {
+    try {
+      const dbProfile = await getCurrentProfile();
+      if (dbProfile && (!username || dbProfile.username.toLowerCase() === target)) {
+        baseAuthor = {
+          username: dbProfile.username,
+          full_name: dbProfile.full_name || dbProfile.username,
+          avatar_url: dbProfile.avatar_url || undefined,
+          bio: dbProfile.bio || undefined,
+          github_url: dbProfile.github_url || undefined,
+          twitter_url: dbProfile.twitter_url || undefined,
+          website_url: dbProfile.website_url || undefined,
+          location: dbProfile.location || "Global",
+          reputation_score: dbProfile.reputation_score || 520,
+          badges: dbProfile.badges || ["Ideator", "Remixer", "Shipper"],
+        };
+      }
+    } catch {
+      // fallback to local mock persona
     }
   }
 
-  // 4. Update Supabase if configured and authenticated
+  if (!baseAuthor) {
+    baseAuthor =
+      MOCK_AUTHORS.find((a) => a.username.toLowerCase() === target) ||
+      MOCK_AUTHORS.find((a) => a.username === "you_builder")!;
+  }
+
+  return applyProfileOverrides(baseAuthor);
+}
+
+function syncAuthorIntoMemory(targetUsername: string, updatedAuthor: IdeaAuthor): void {
+  const match = (candidate?: IdeaAuthor): IdeaAuthor | undefined => {
+    if (!candidate) return candidate;
+    return candidate.username.toLowerCase() === targetUsername
+      ? { ...candidate, ...updatedAuthor, username: candidate.username }
+      : candidate;
+  };
+
+  const mockIdx = MOCK_AUTHORS.findIndex((a) => a.username.toLowerCase() === targetUsername);
+  if (mockIdx !== -1) {
+    MOCK_AUTHORS[mockIdx] = { ...MOCK_AUTHORS[mockIdx], ...updatedAuthor };
+  }
+
+  memoryIdeas.forEach((idea) => {
+    if (idea.author) idea.author = match(idea.author);
+    if (idea.team_members) {
+      idea.team_members = idea.team_members.map((m) => match(m) || m);
+    }
+    if (idea.builds) {
+      idea.builds = idea.builds.map((b) => ({ ...b, builder: match(b.builder) || b.builder }));
+    }
+    if (idea.feature_requests) {
+      idea.feature_requests = idea.feature_requests.map((pr) => ({
+        ...pr,
+        proposer: match(pr.proposer) || pr.proposer,
+      }));
+    }
+    if (idea.comments) {
+      idea.comments = idea.comments.map((c) => ({ ...c, user: match(c.user) || c.user }));
+    }
+  });
+}
+
+export async function updateUserProfile(
+  updates: Partial<IdeaAuthor> & { username?: string }
+): Promise<IdeaAuthor> {
+  const targetUsername = (updates.username || "you_builder").toLowerCase().replace(/^@/, "").trim();
+  const current = await getActiveBuilderProfile(targetUsername);
+  const { username: _ignored, ...cleanPatch } = updates;
+
+  const merged: IdeaAuthor = {
+    ...current,
+    ...cleanPatch,
+    username: current.username,
+  };
+
+  const overrides = readProfileOverrides();
+  overrides[targetUsername] = {
+    ...(overrides[targetUsername] || {}),
+    ...cleanPatch,
+  };
+  writeProfileOverrides(overrides);
+  syncAuthorIntoMemory(targetUsername, merged);
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await (supabase as any)
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.id) {
+        const { error } = await (supabase as any)
           .from("profiles")
           .update({
-            full_name: updates.full_name,
-            bio: updates.bio,
-            location: updates.location,
-            github_url: updates.github_url,
-            twitter_url: updates.twitter_url,
-            discord_url: updates.discord_url,
-            website_url: updates.website_url,
-            updated_at: new Date().toISOString(),
+            full_name: merged.full_name || null,
+            bio: merged.bio || null,
+            location: merged.location || null,
+            avatar_url: merged.avatar_url || null,
+            github_url: merged.github_url || null,
+            twitter_url: merged.twitter_url || null,
+            website_url: merged.website_url || null,
           })
-          .eq("id", user.id);
+          .eq("id", data.user.id);
+        if (error) console.warn("Supabase profile sync warning:", error.message);
       }
     } catch {
-      // ignore
+      // local persistence already succeeded
     }
   }
 
-  const updatedProfile = await getUserProfile(cleanUsername);
-  return {
-    success: true,
-    author: updatedProfile?.author || null,
-    message: "Profile and contact handles updated successfully!",
+  return merged;
+}
+
+export function resetUserProfile(username = "you_builder"): IdeaAuthor {
+  const target = username.toLowerCase().replace(/^@/, "").trim();
+  const overrides = readProfileOverrides();
+  delete overrides[target];
+  writeProfileOverrides(overrides);
+  return MOCK_AUTHORS.find((a) => a.username.toLowerCase() === target) || MOCK_AUTHORS[4];
+}
+
+export function subscribeProfileUpdates(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => callback();
+  window.addEventListener(EVENT_PROFILE_UPDATED, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(EVENT_PROFILE_UPDATED, handler);
+    window.removeEventListener("storage", handler);
+  };
+}
+
+function buildInitialNotifications(): IdeaNotification[] {
+  const first = memoryIdeas[0];
+  const second = memoryIdeas[1] || first;
+  const third = memoryIdeas[2] || first;
+
+  return [
+    {
+      id: "notif-seed-1",
+      type: "pr",
+      title: "Feature PR #14 Ready for Review",
+      message: "Proposed adding CRDT conflict resolution inspector to MVP scope.",
+      idea_slug: first?.slug || "local-first-crm",
+      idea_title: first?.title || "Local-First CRDT Workspace",
+      actor: MOCK_AUTHORS[1],
+      created_at: "14m ago",
+      read: false,
+      target_tab: "prs",
+    },
+    {
+      id: "notif-seed-2",
+      type: "collab",
+      title: "New Founding Engineer Pitch",
+      message: "Applied for Systems Architect (Rust / WASM) • 15 hrs/wk availability.",
+      idea_slug: second?.slug || "agent-router",
+      idea_title: second?.title || "Deterministic Agent Router",
+      actor: MOCK_AUTHORS[0],
+      created_at: "1h ago",
+      read: false,
+      target_tab: "team",
+    },
+    {
+      id: "notif-seed-3",
+      type: "fork",
+      title: "Downstream Blueprint Forked",
+      message: "Created an edge-offline mobile variant in your spec lineage tree.",
+      idea_slug: third?.slug || first?.slug || "local-first-crm",
+      idea_title: third?.title || first?.title || "Edge Telemetry Hub",
+      actor: MOCK_AUTHORS[2],
+      created_at: "3h ago",
+      read: false,
+      target_tab: "lineage",
+    },
+    {
+      id: "notif-seed-4",
+      type: "build",
+      title: "Proof-of-Work Demo Shipped",
+      message: "Linked live Vercel preview & GitHub repository implementation.",
+      idea_slug: first?.slug || "local-first-crm",
+      idea_title: first?.title || "Local-First CRDT Workspace",
+      actor: MOCK_AUTHORS[3],
+      created_at: "1d ago",
+      read: true,
+      target_tab: "builds",
+    },
+    {
+      id: "notif-seed-5",
+      type: "comment",
+      title: "Architectural Thread Reply",
+      message: "Replied with SQLite WAL journal tuning benchmarks for concurrent writes.",
+      idea_slug: second?.slug || first?.slug || "agent-router",
+      idea_title: second?.title || first?.title || "Deterministic Agent Router",
+      actor: MOCK_AUTHORS[1],
+      created_at: "2d ago",
+      read: true,
+      target_tab: "discussions",
+    },
+  ];
+}
+
+function persistNotifications(list: IdeaNotification[]): void {
+  memoryNotifications = list;
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY_NOTIFICATIONS, JSON.stringify(list));
+    } catch {
+      // ignore quota errors
+    }
+  }
+  emitBrowserEvent(EVENT_NOTIFICATIONS_UPDATED);
+}
+
+export function getNotifications(): IdeaNotification[] {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
+      if (raw) {
+        const parsed = JSON.parse(raw) as IdeaNotification[];
+        memoryNotifications = parsed;
+        return parsed;
+      }
+    } catch {
+      // fall through to seed
+    }
+  }
+
+  if (!memoryNotifications) {
+    const seeded = buildInitialNotifications();
+    persistNotifications(seeded);
+    return seeded;
+  }
+  return memoryNotifications;
+}
+
+export function addNotification(input: {
+  type: NotificationType;
+  title: string;
+  message: string;
+  idea_slug: string;
+  idea_title: string;
+  actor?: IdeaAuthor;
+  target_tab?: IdeaDetailTab;
+  read?: boolean;
+}): IdeaNotification {
+  const existing = getNotifications();
+  const next: IdeaNotification = {
+    id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    idea_slug: input.idea_slug,
+    idea_title: input.idea_title,
+    actor: input.actor || getCurrentActorAuthor(),
+    created_at: "Just now",
+    read: input.read ?? false,
+    target_tab: input.target_tab,
+  };
+
+  persistNotifications([next, ...existing].slice(0, 40));
+  return next;
+}
+
+export function markNotificationRead(id: string): IdeaNotification[] {
+  const updated = getNotifications().map((n) => (n.id === id ? { ...n, read: true } : n));
+  persistNotifications(updated);
+  return updated;
+}
+
+export function markAllNotificationsRead(): IdeaNotification[] {
+  const updated = getNotifications().map((n) => ({ ...n, read: true }));
+  persistNotifications(updated);
+  return updated;
+}
+
+export function resetNotifications(): IdeaNotification[] {
+  const seeded = buildInitialNotifications();
+  persistNotifications(seeded);
+  return seeded;
+}
+
+export function getUnreadNotificationCount(): number {
+  return getNotifications().filter((n) => !n.read).length;
+}
+
+export function subscribeNotifications(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => callback();
+  window.addEventListener(EVENT_NOTIFICATIONS_UPDATED, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(EVENT_NOTIFICATIONS_UPDATED, handler);
+    window.removeEventListener("storage", handler);
   };
 }
 

@@ -5,8 +5,12 @@ export type CollabStatus = 'open' | 'seeking_cofounder';
 export interface IdeaAuthor {
   username: string;
   full_name?: string;
+  headline?: string;
   avatar_url?: string;
   bio?: string;
+  email?: string;
+  availability?: string;
+  preferred_stack?: string[];
   github_url?: string;
   twitter_url?: string;
   discord_url?: string;
@@ -104,4 +108,21 @@ export interface CollaborationRequest {
   pitch: string;
   status: 'pending' | 'accepted' | 'declined';
   created_at: string;
+}
+
+export type NotificationType = 'star' | 'fork' | 'pr' | 'collab' | 'build' | 'comment';
+
+export type IdeaDetailTab = 'spec' | 'discussions' | 'prs' | 'builds' | 'lineage' | 'team';
+
+export interface IdeaNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  idea_slug: string;
+  idea_title: string;
+  actor: IdeaAuthor;
+  created_at: string;
+  read: boolean;
+  target_tab?: IdeaDetailTab;
 }

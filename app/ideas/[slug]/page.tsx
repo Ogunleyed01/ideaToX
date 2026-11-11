@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Star,
@@ -59,7 +59,7 @@ import { ForkModal } from "@/components/fork-modal";
 import { LineageTree } from "@/components/lineage-tree";
 import { CollaborateModal } from "@/components/collaborate-modal";
 import { SpecExportModal } from "@/components/spec-export-modal";
-import { getActiveUser, onAuthChange, ActiveSessionUser } from "@/lib/auth";
+import { getCurrentProfile } from "@/lib/supabase/client";
 
 const DIFFICULTY_CONFIG: Record<
   IdeaDifficulty,
@@ -90,6 +90,7 @@ const DIFFICULTY_CONFIG: Record<
 
 function IdeaDetailContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const rawSlug = params?.slug as string;
   const slug = rawSlug ? decodeURIComponent(rawSlug) : "";
 
@@ -101,8 +102,20 @@ function IdeaDetailContent() {
   // Interactive checklist state
   const [checkedFeatures, setCheckedFeatures] = useState<Record<number, boolean>>({});
 
-  // Active view tab
-  const [activeTab, setActiveTab] = useState<"spec" | "discussions" | "prs" | "builds" | "lineage" | "team">("spec");
+  // Active view tab (supports ?tab= deep links from Builder Inbox notifications)
+  const validTabs = ["spec", "discussions", "prs", "builds", "lineage", "team"] as const;
+  const tabParam = searchParams?.get("tab");
+  const initialTab =
+    tabParam && (validTabs as readonly string[]).includes(tabParam)
+      ? (tabParam as (typeof validTabs)[number])
+      : "spec";
+  const [activeTab, setActiveTab] = useState<"spec" | "discussions" | "prs" | "builds" | "lineage" | "team">(initialTab);
+
+  useEffect(() => {
+    if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
+      setActiveTab(tabParam as (typeof validTabs)[number]);
+    }
+  }, [tabParam]);
 
   // Interaction feedback states
   const [starred, setStarred] = useState(false);
@@ -120,7 +133,6 @@ function IdeaDetailContent() {
 
   // Maintainer view mode
   const [isOwnerView, setIsOwnerView] = useState(true);
-  const [currentUser, setCurrentUser] = useState<ActiveSessionUser | null>(null);
 
   // Feature PR submission form
   const [prActionType, setPrActionType] = useState<"add_feature" | "remove_feature">("add_feature");
@@ -166,24 +178,10 @@ function IdeaDetailContent() {
 
         const related = await getRelatedIdeas(fetchedIdea.category, fetchedIdea.slug);
         setRelatedIdeas(related);
-
-        const user = await getActiveUser();
-        setCurrentUser(user);
-        if (user && fetchedIdea.author) {
-          setIsOwnerView(user.username.toLowerCase() === fetchedIdea.author.username.toLowerCase());
-        }
       }
       setLoading(false);
     }
     loadData();
-
-    const unsub = onAuthChange((user) => {
-      setCurrentUser(user);
-      if (user && idea?.author) {
-        setIsOwnerView(user.username.toLowerCase() === idea.author.username.toLowerCase());
-      }
-    });
-    return () => unsub();
   }, [slug]);
 
   if (loading) {
@@ -284,14 +282,20 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     if (!prFeatureText.trim()) return;
 
     let proposer = undefined;
-    if (currentUser) {
-      proposer = {
-        username: currentUser.username,
-        full_name: currentUser.full_name || currentUser.username,
-        avatar_url: currentUser.avatar_url,
-        reputation_score: currentUser.reputation_score || 350,
-        badges: currentUser.badges || ["Ideator"],
-      };
+    try {
+      const profile = await getCurrentProfile();
+      if (profile) {
+        const p = profile as any;
+        proposer = {
+          username: p.username,
+          full_name: p.full_name || p.username,
+          avatar_url: p.avatar_url || undefined,
+          reputation_score: p.reputation_score || 300,
+          badges: p.badges || ["Ideator"],
+        };
+      }
+    } catch {
+      // fallback
     }
 
     const newPR = await addFeatureRequest(idea.slug, {
@@ -328,14 +332,20 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     if (!repoUrl.trim()) return;
 
     let builder = undefined;
-    if (currentUser) {
-      builder = {
-        username: currentUser.username,
-        full_name: currentUser.full_name || currentUser.username,
-        avatar_url: currentUser.avatar_url,
-        reputation_score: currentUser.reputation_score || 350,
-        badges: currentUser.badges || ["Shipper"],
-      };
+    try {
+      const profile = await getCurrentProfile();
+      if (profile) {
+        const p = profile as any;
+        builder = {
+          username: p.username,
+          full_name: p.full_name || p.username,
+          avatar_url: p.avatar_url || undefined,
+          reputation_score: p.reputation_score || 300,
+          badges: p.badges || ["Shipper"],
+        };
+      }
+    } catch {
+      // fallback
     }
 
     const res = await addIdeaBuild(idea.slug, {
@@ -367,14 +377,20 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
     setIsSubmittingComment(true);
     try {
       let authorUser = undefined;
-      if (currentUser) {
-        authorUser = {
-          username: currentUser.username,
-          full_name: currentUser.full_name || currentUser.username,
-          avatar_url: currentUser.avatar_url,
-          reputation_score: currentUser.reputation_score || 350,
-          badges: currentUser.badges || ["Ideator"],
-        };
+      try {
+        const profile = await getCurrentProfile();
+        if (profile) {
+          const p = profile as any;
+          authorUser = {
+            username: p.username,
+            full_name: p.full_name || p.username,
+            avatar_url: p.avatar_url || undefined,
+            reputation_score: p.reputation_score || 300,
+            badges: p.badges || ["Ideator"],
+          };
+        }
+      } catch {
+        // fallback
       }
 
       const created = await addIdeaComment(idea.slug, text, parentId, authorUser);
