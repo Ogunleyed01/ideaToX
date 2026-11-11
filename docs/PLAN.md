@@ -92,4 +92,15 @@
 - [x] **Task 11.2:** Build **Builder Notification & Activity Center ("Builder Inbox")**:
   - `NotificationDrawer` slide-over inbox triggered from `FloatingNavbar` with live unread counter badge (`subscribeNotifications`).
   - Category filters (`All`, `Unread`, `PRs & Collabs`, `Forks & Stars`), 1-click *Mark all read*, and deep-link navigation straight to `/ideas/[slug]?tab=...` (`prs`, `team`, `builds`, `lineage`, `discussions`).
-  - Automatic notification emission on stars, lineage forks, Feature PR submissions, proof-of-work builds, threaded discussions, and collaboration pitches.
+  - Automatic notification emission on stars, lineage forks, Feature PR submissions, proof-of-work builds, threaded discussions, and collaboration pitches.
+
+## Milestone 12: Shareable Collections, Hosting Cost Estimator & System Topology (Completed)
+- [x] **Task 12.1:** **Shareable Filter URLs, Curated Collections & Reading List**:
+  - Two-way URL query parameter synchronization in `/ideas` (`q`, `category`, `difficulty`, `region`, `collab`, `status`, `collection`, `sort`, `view`) with 1-click *Copy Filter URL* sharing inside a `<Suspense>` boundary.
+  - 5 Curated Blueprint Playlists (*Weekend Portfolio Quickstarts*, *Autonomous AI Agent Specs*, *Local-First & Offline Systems*, *Hardware & IoT Weekend Hacks*, and personal *Want to Build* reading list).
+  - Live `localStorage` Bookmark ("Want to Build") toggles synced across `IdeaCard`, `/ideas/[slug]`, `/ideas`, and the `/profile/[username]` *Reading List* portfolio tab (`subscribeBookmarks`).
+- [x] **Task 12.2:** **Infrastructure & Monthly Hosting Cost Estimator** (`lib/architecture.ts`, `components/infrastructure-estimator.tsx`):
+  - Interactive scale toggle (`Hobby / MVP`, `Production`, `High Scale`) calculating realistic monthly provider spend across Compute, Database, Storage/Realtime, and AI/Transactional services, plus recommended packages and 1-line starter bootstrap CLI commands.
+- [x] **Task 12.3:** **Visual System Architecture Topology & Mermaid Export** (`components/architecture-topology.tsx`, `components/spec-export-modal.tsx`):
+  - Interactive dot-matrix node topology canvas with clickable architectural layers (`Surface`, `Compute`, `Data Store`, `External`), live payload flow protocol inspector, standalone `Mermaid .mmd` view/copy toggle, and embedded Mermaid diagrams + cost estimates in all *Export for AI* (`Cursor`, `Claude Code`, `GitHub SPEC.md`, `Mermaid & Infra`) outputs.
+

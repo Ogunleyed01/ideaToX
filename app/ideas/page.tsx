@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, Suspense, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Search,
-  SlidersHorizontal,
   Sparkles,
   Filter,
   ArrowUpDown,
@@ -14,24 +14,42 @@ import {
   X,
   ArrowRight,
   GitFork,
-  Star,
   Terminal,
   Layers,
   Globe,
   Zap,
   Code2,
-  CheckCircle2,
-  Rocket,
   Plus,
+  Bookmark,
+  Link2,
+  Check,
+  Compass,
 } from "lucide-react";
-import { getAllIdeas } from "@/lib/ideas";
-import { Idea, IdeaCategory, IdeaDifficulty, CollabStatus } from "@/types/idea";
+import {
+  getAllIdeas,
+  CURATED_COLLECTIONS,
+  matchesCuratedCollection,
+  getSavedBookmarks,
+  getServerSavedBookmarks,
+  subscribeBookmarks,
+} from "@/lib/ideas";
+import {
+  Idea,
+  IdeaCategory,
+  IdeaDifficulty,
+  CollabStatus,
+  CuratedCollectionId,
+} from "@/types/idea";
 import { FloatingNavbar } from "@/components/floating-navbar";
 import { IdeaCard } from "@/components/idea-card";
 import { ForkModal } from "@/components/fork-modal";
 import { ObsidianMegaFooter } from "@/components/obsidian-mega-footer";
 
-const CATEGORIES: { id: "all" | IdeaCategory; label: string; icon: any }[] = [
+const CATEGORIES: {
+  id: "all" | IdeaCategory;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}[] = [
   { id: "all", label: "All Blueprints", icon: Layers },
   { id: "web", label: "Web Apps", icon: Globe },
   { id: "mobile", label: "Mobile PWAs", icon: Layers },
@@ -41,19 +59,90 @@ const CATEGORIES: { id: "all" | IdeaCategory; label: string; icon: any }[] = [
   { id: "extension", label: "Extensions", icon: Code2 },
 ];
 
-export default function IdeasDirectoryPage() {
+const VALID_CATEGORIES = new Set<string>(["all", "web", "mobile", "ai", "cli", "hardware", "extension"]);
+const VALID_DIFFICULTIES = new Set<string>(["all", "beginner", "intermediate", "advanced"]);
+const VALID_COLLABS = new Set<string>(["all", "open", "seeking_cofounder"]);
+const VALID_STATUSES = new Set<string>(["all", "shipped", "unbuilt"]);
+const VALID_SORTS = new Set<string>(["stars", "newest", "forks", "builds"]);
+const VALID_COLLECTIONS = new Set<string>([
+  "weekend_quickstarts",
+  "autonomous_agents",
+  "local_first",
+  "hardware_iot",
+  "want_to_build",
+]);
+
+function IdeasDirectoryContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedShareUrl, setCopiedShareUrl] = useState(false);
 
-  // Filter States
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<"all" | IdeaCategory>("all");
-  const [selectedDifficulty, setSelectedDifficulty] = useState<"all" | IdeaDifficulty>("all");
-  const [selectedRegion, setSelectedRegion] = useState<string>("all");
-  const [selectedCollab, setSelectedCollab] = useState<"all" | CollabStatus>("all");
-  const [selectedBuildStatus, setSelectedBuildStatus] = useState<"all" | "shipped" | "unbuilt">("all");
-  const [sortBy, setSortBy] = useState<"stars" | "newest" | "forks" | "builds">("stars");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const bookmarkedSlugs = useSyncExternalStore(
+    subscribeBookmarks,
+    getSavedBookmarks,
+    getServerSavedBookmarks
+  );
+
+  // Derive filter states directly from shareable URL query parameters
+  const searchQuery = searchParams?.get("q") || "";
+  const rawCategory = searchParams?.get("category") || "all";
+  const selectedCategory = (
+    VALID_CATEGORIES.has(rawCategory) ? rawCategory : "all"
+  ) as "all" | IdeaCategory;
+
+  const rawDifficulty = searchParams?.get("difficulty") || "all";
+  const selectedDifficulty = (
+    VALID_DIFFICULTIES.has(rawDifficulty) ? rawDifficulty : "all"
+  ) as "all" | IdeaDifficulty;
+
+  const selectedRegion = searchParams?.get("region") || "all";
+
+  const rawCollab = searchParams?.get("collab") || "all";
+  const selectedCollab = (
+    VALID_COLLABS.has(rawCollab) ? rawCollab : "all"
+  ) as "all" | CollabStatus;
+
+  const rawStatus = searchParams?.get("status") || "all";
+  const selectedBuildStatus = (
+    VALID_STATUSES.has(rawStatus) ? rawStatus : "all"
+  ) as "all" | "shipped" | "unbuilt";
+
+  const rawCollection = searchParams?.get("collection") || "";
+  const selectedCollection = VALID_COLLECTIONS.has(rawCollection)
+    ? (rawCollection as CuratedCollectionId)
+    : null;
+
+  const rawSort = searchParams?.get("sort") || "stars";
+  const sortBy = (
+    VALID_SORTS.has(rawSort) ? rawSort : "stars"
+  ) as "stars" | "newest" | "forks" | "builds";
+
+  const viewMode: "grid" | "list" =
+    searchParams?.get("view") === "list" ? "list" : "grid";
+
+  const updateFilterParams = (updates: Record<string, string | null>) => {
+    const nextParams = new URLSearchParams(searchParams?.toString() || "");
+    Object.entries(updates).forEach(([key, value]) => {
+      const isDefault =
+        value === null ||
+        value === "" ||
+        (key !== "q" && value === "all") ||
+        (key === "sort" && value === "stars") ||
+        (key === "view" && value === "grid");
+
+      if (isDefault) {
+        nextParams.delete(key);
+      } else {
+        nextParams.set(key, value);
+      }
+    });
+
+    const nextQs = nextParams.toString();
+    router.replace(nextQs ? `/ideas?${nextQs}` : "/ideas", { scroll: false });
+  };
 
   // Pagination / Load More state
   const [visibleCount, setVisibleCount] = useState(18);
@@ -66,6 +155,7 @@ export default function IdeasDirectoryPage() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const paletteInputRef = useRef<HTMLInputElement>(null);
 
+  // Hydrate ideas
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -111,9 +201,33 @@ export default function IdeasDirectoryPage() {
     return ["all", ...Array.from(set).sort()];
   }, [ideas]);
 
+  // Collection counts
+  const collectionCounts = useMemo(() => {
+    const counts: Record<CuratedCollectionId, number> = {
+      weekend_quickstarts: 0,
+      autonomous_agents: 0,
+      local_first: 0,
+      hardware_iot: 0,
+      want_to_build: 0,
+    };
+    CURATED_COLLECTIONS.forEach((col) => {
+      counts[col.id] = ideas.filter((idea) =>
+        matchesCuratedCollection(idea, col.id, bookmarkedSlugs)
+      ).length;
+    });
+    return counts;
+  }, [ideas, bookmarkedSlugs]);
+
   // Filter & Sort Logic
   const filteredIdeas = useMemo(() => {
     let result = [...ideas];
+
+    // Curated Collection playlist filter
+    if (selectedCollection) {
+      result = result.filter((i) =>
+        matchesCuratedCollection(i, selectedCollection, bookmarkedSlugs)
+      );
+    }
 
     // Search query filter
     if (searchQuery.trim()) {
@@ -180,6 +294,8 @@ export default function IdeasDirectoryPage() {
     return result;
   }, [
     ideas,
+    selectedCollection,
+    bookmarkedSlugs,
     searchQuery,
     selectedCategory,
     selectedDifficulty,
@@ -195,6 +311,7 @@ export default function IdeasDirectoryPage() {
 
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
+    Boolean(selectedCollection) ||
     selectedCategory !== "all" ||
     selectedDifficulty !== "all" ||
     selectedRegion !== "all" ||
@@ -202,13 +319,14 @@ export default function IdeasDirectoryPage() {
     selectedBuildStatus !== "all";
 
   const handleResetFilters = () => {
-    setSearchQuery("");
-    setSelectedCategory("all");
-    setSelectedDifficulty("all");
-    setSelectedRegion("all");
-    setSelectedCollab("all");
-    setSelectedBuildStatus("all");
-    setSortBy("stars");
+    router.replace("/ideas", { scroll: false });
+  };
+
+  const handleCopyShareableUrl = () => {
+    if (typeof window === "undefined") return;
+    navigator.clipboard.writeText(window.location.href);
+    setCopiedShareUrl(true);
+    setTimeout(() => setCopiedShareUrl(false), 2000);
   };
 
   // Command palette search items
@@ -288,6 +406,91 @@ export default function IdeasDirectoryPage() {
         </div>
 
         {/* =========================================================================
+            CURATED COLLECTIONS & PERSONAL READING LIST STRIP
+           ========================================================================= */}
+        <section aria-label="Curated Blueprint Collections" className="mb-7 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-zinc-500 font-bold">
+              <Compass size={13} className="text-amber-600" />
+              <span>Curated Blueprint Playlists &amp; Reading List</span>
+            </div>
+            {selectedCollection && (
+              <button
+                type="button"
+                onClick={() => updateFilterParams({ collection: null })}
+                className="text-[11px] font-mono text-amber-800 hover:underline cursor-pointer"
+              >
+                Clear playlist filter
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {CURATED_COLLECTIONS.map((col) => {
+              const active = selectedCollection === col.id;
+              const count = collectionCounts[col.id] ?? 0;
+              const isReadingList = col.id === "want_to_build";
+
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() =>
+                    updateFilterParams({ collection: active ? null : col.id })
+                  }
+                  className={`text-left p-4 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-2.5 cursor-pointer ${
+                    active
+                      ? "bg-[#0D0E12] text-white border-[#0D0E12] shadow-lg -translate-y-0.5 ring-2 ring-amber-400/40"
+                      : "bg-white text-[#111113] border-zinc-200/90 hover:border-amber-300 hover:shadow-md"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 w-full">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[9px] font-mono uppercase tracking-wider font-bold border ${
+                        active
+                          ? "bg-amber-400/20 text-amber-300 border-amber-400/30"
+                          : isReadingList
+                            ? "bg-amber-50 text-amber-800 border-amber-200"
+                            : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                      }`}
+                    >
+                      {col.badge}
+                    </span>
+
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono font-bold tabular-nums ${
+                        active ? "text-emerald-400" : "text-zinc-500"
+                      }`}
+                    >
+                      {isReadingList && (
+                        <Bookmark
+                          size={11}
+                          className={count > 0 ? "fill-current" : ""}
+                        />
+                      )}
+                      {count}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h2 className="font-sans font-semibold text-[13px] leading-snug">
+                      {col.title}
+                    </h2>
+                    <p
+                      className={`text-[11px] mt-1 leading-snug line-clamp-2 ${
+                        active ? "text-zinc-300" : "text-zinc-500"
+                      }`}
+                    >
+                      {col.subtitle}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* =========================================================================
             SEARCH & MULTI-FILTER BAR
            ========================================================================= */}
         <div className="bento-white p-5 sm:p-6 mb-8 space-y-5 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.05)] border border-zinc-200/90">
@@ -302,13 +505,13 @@ export default function IdeasDirectoryPage() {
                 type="text"
                 placeholder="Search by title, pain point, category, or tech stack (e.g. Redis, Rust, PWA)..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => updateFilterParams({ q: e.target.value })}
                 className="w-full pl-10 pr-10 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs sm:text-sm text-[#111113] placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all font-medium"
               />
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => updateFilterParams({ q: null })}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-black rounded"
                 >
                   <X size={14} />
@@ -321,7 +524,7 @@ export default function IdeasDirectoryPage() {
               <div className="relative shrink-0">
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
+                  onChange={(e) => updateFilterParams({ sort: e.target.value })}
                   aria-label="Sort specifications"
                   className="appearance-none pl-8 pr-8 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-xs font-mono text-zinc-700 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-400/40 cursor-pointer"
                 >
@@ -340,7 +543,7 @@ export default function IdeasDirectoryPage() {
               <div className="flex items-center p-1 bg-zinc-100 rounded-xl border border-zinc-200/80">
                 <button
                   type="button"
-                  onClick={() => setViewMode("grid")}
+                  onClick={() => updateFilterParams({ view: "grid" })}
                   className={`p-1.5 rounded-lg transition-colors ${
                     viewMode === "grid"
                       ? "bg-white text-[#111113] shadow-xs"
@@ -353,7 +556,7 @@ export default function IdeasDirectoryPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode("list")}
+                  onClick={() => updateFilterParams({ view: "list" })}
                   className={`p-1.5 rounded-lg transition-colors ${
                     viewMode === "list"
                       ? "bg-white text-[#111113] shadow-xs"
@@ -377,7 +580,7 @@ export default function IdeasDirectoryPage() {
                 <button
                   key={cat.id}
                   type="button"
-                  onClick={() => setSelectedCategory(cat.id)}
+                  onClick={() => updateFilterParams({ category: cat.id })}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-mono transition-all whitespace-nowrap cursor-pointer ${
                     active
                       ? "bg-[#111113] text-white font-semibold shadow-xs"
@@ -410,7 +613,7 @@ export default function IdeasDirectoryPage() {
             {/* Difficulty Filter */}
             <select
               value={selectedDifficulty}
-              onChange={(e) => setSelectedDifficulty(e.target.value as any)}
+              onChange={(e) => updateFilterParams({ difficulty: e.target.value })}
               aria-label="Filter by difficulty tier"
               className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
             >
@@ -423,7 +626,7 @@ export default function IdeasDirectoryPage() {
             {/* Region Filter */}
             <select
               value={selectedRegion}
-              onChange={(e) => setSelectedRegion(e.target.value)}
+              onChange={(e) => updateFilterParams({ region: e.target.value })}
               aria-label="Filter by target region"
               className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
             >
@@ -440,7 +643,7 @@ export default function IdeasDirectoryPage() {
             {/* Collab Status Filter */}
             <select
               value={selectedCollab}
-              onChange={(e) => setSelectedCollab(e.target.value as any)}
+              onChange={(e) => updateFilterParams({ collab: e.target.value })}
               aria-label="Filter by collaboration status"
               className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
             >
@@ -452,7 +655,7 @@ export default function IdeasDirectoryPage() {
             {/* Shipped / Unbuilt Filter */}
             <select
               value={selectedBuildStatus}
-              onChange={(e) => setSelectedBuildStatus(e.target.value as any)}
+              onChange={(e) => updateFilterParams({ status: e.target.value })}
               aria-label="Filter by proof-of-work status"
               className="px-2.5 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-700 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
             >
@@ -461,34 +664,67 @@ export default function IdeasDirectoryPage() {
               <option value="unbuilt">Unbuilt / Fresh Concepts</option>
             </select>
 
-            {/* Reset Filters CTA */}
-            {hasActiveFilters && (
+            {/* Shareable Filter URL & Reset Filters CTA */}
+            <div className="ml-auto flex items-center gap-2">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-zinc-500 hover:text-amber-800 transition-colors font-medium cursor-pointer"
+                >
+                  <RotateCcw size={12} />
+                  <span>Reset Filters</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={handleResetFilters}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-zinc-500 hover:text-amber-800 transition-colors ml-auto font-medium"
+                onClick={handleCopyShareableUrl}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-zinc-200 hover:border-zinc-300 text-zinc-700 hover:text-black transition-colors shadow-2xs cursor-pointer"
               >
-                <RotateCcw size={12} />
-                <span>Reset Filters</span>
+                {copiedShareUrl ? (
+                  <>
+                    <Check size={12} className="text-emerald-600" />
+                    <span className="text-emerald-700 font-semibold">URL Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Link2 size={12} className="text-amber-600" />
+                    <span>Share Filter URL</span>
+                  </>
+                )}
               </button>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Telemetry Counter */}
-        <div className="flex items-center justify-between mb-6 text-xs font-mono text-zinc-500">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-6 text-xs font-mono text-zinc-500">
+          <div className="flex flex-wrap items-center gap-2">
             <span>SHOWING:</span>
             <span className="font-bold text-[#111113]">
               {filteredIdeas.length} of {ideas.length}
             </span>
             <span>BLUEPRINTS</span>
+            {selectedCollection && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-semibold">
+                {CURATED_COLLECTIONS.find((c) => c.id === selectedCollection)?.title}
+                <button
+                  type="button"
+                  onClick={() => updateFilterParams({ collection: null })}
+                  className="hover:text-black ml-0.5 cursor-pointer"
+                  aria-label="Clear playlist filter"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )}
           </div>
 
           {searchQuery && (
             <div className="flex items-center gap-1.5 text-zinc-600">
               <span>QUERY:</span>
-              <span className="font-semibold text-amber-800">"{searchQuery}"</span>
+              <span className="font-semibold text-amber-800">&quot;{searchQuery}&quot;</span>
             </div>
           )}
         </div>
@@ -667,3 +903,21 @@ export default function IdeasDirectoryPage() {
     </div>
   );
 }
+
+export default function IdeasDirectoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-zinc-600 font-mono text-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
+            <span>SYNCHRONIZING IDEA REGISTRY...</span>
+          </div>
+        </div>
+      }
+    >
+      <IdeasDirectoryContent />
+    </Suspense>
+  );
+}
+

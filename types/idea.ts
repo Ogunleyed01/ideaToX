@@ -125,4 +125,66 @@ export interface IdeaNotification {
   created_at: string;
   read: boolean;
   target_tab?: IdeaDetailTab;
-}
+}
+
+export type CuratedCollectionId =
+  | 'weekend_quickstarts'
+  | 'autonomous_agents'
+  | 'local_first'
+  | 'hardware_iot'
+  | 'want_to_build';
+
+export interface CuratedCollection {
+  id: CuratedCollectionId;
+  title: string;
+  subtitle: string;
+  badge: string;
+}
+
+export type InfrastructureScaleTier = 'hobby' | 'production' | 'scale';
+
+export interface InfrastructureLineItem {
+  layer: 'compute' | 'database' | 'storage' | 'services';
+  label: string;
+  provider: string;
+  allowance: string;
+  monthlyUsd: number;
+}
+
+export interface InfrastructureEstimate {
+  tier: InfrastructureScaleTier;
+  monthlyTotalUsd: number;
+  architectureSummary: string;
+  items: InfrastructureLineItem[];
+  recommendedPackages: string[];
+  starterCommand: string;
+  costNote: string;
+}
+
+export type ArchNodeTier = 'client' | 'compute' | 'data' | 'external';
+
+export interface ArchNode {
+  id: string;
+  tier: ArchNodeTier;
+  title: string;
+  subtitle: string;
+  techTag: string;
+  latencyLabel: string;
+}
+
+export interface ArchFlow {
+  id: string;
+  from: string;
+  to: string;
+  protocol: string;
+  payload: string;
+}
+
+export interface ArchitectureTopology {
+  summary: string;
+  syncPattern: string;
+  nodes: ArchNode[];
+  flows: ArchFlow[];
+  mermaidCode: string;
+}
+

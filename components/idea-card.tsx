@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Star, GitFork, Terminal, ArrowUpRight } from "lucide-react";
+import { Star, GitFork, Terminal, ArrowUpRight, Bookmark } from "lucide-react";
 import { Idea, IdeaDifficulty } from "@/types/idea";
-import { hasUserUpvoted, toggleUpvote } from "@/lib/ideas";
+import {
+  hasUserUpvoted,
+  toggleUpvote,
+  subscribeUpvotes,
+  isIdeaBookmarked,
+  toggleIdeaBookmark,
+  subscribeBookmarks,
+} from "@/lib/ideas";
 
 const DIFFICULTY_META: Record<
   IdeaDifficulty,
@@ -44,31 +51,44 @@ export function IdeaCard({
   viewMode = "grid",
   onForkClick,
 }: IdeaCardProps) {
-  const [starred, setStarred] = useState(false);
+  const starredFromStore = useSyncExternalStore(
+    subscribeUpvotes,
+    () => hasUserUpvoted(idea.slug),
+    () => false
+  );
+  const bookmarked = useSyncExternalStore(
+    subscribeBookmarks,
+    () => isIdeaBookmarked(idea.slug),
+    () => false
+  );
+  const [starredOverride, setStarredOverride] = useState<boolean | null>(null);
   const [starCount, setStarCount] = useState(
     idea.upvotes_count ?? ((index * 17 + 23) % 90) + 14
   );
 
-  useEffect(() => {
-    setStarred(hasUserUpvoted(idea.slug));
-  }, [idea.slug]);
-
+  const starred = starredOverride ?? starredFromStore;
   const meta = DIFFICULTY_META[idea.difficulty] ?? DIFFICULTY_META.intermediate;
+
+  const handleBookmark = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleIdeaBookmark(idea.slug);
+  };
 
   const handleStar = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const prevStarred = starred;
     const prevCount = starCount;
-    setStarred(!prevStarred);
+    setStarredOverride(!prevStarred);
     setStarCount(prevStarred ? prevCount - 1 : prevCount + 1);
 
     try {
       const res = await toggleUpvote(idea.slug);
-      setStarred(res.starred);
+      setStarredOverride(null);
       setStarCount(res.upvotes_count);
     } catch {
-      setStarred(prevStarred);
+      setStarredOverride(null);
       setStarCount(prevCount);
     }
   };
@@ -205,6 +225,22 @@ export function IdeaCard({
             <Terminal className="w-3.5 h-3.5" />
             <span>{idea.builds_count ?? (index % 4) + 1}</span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleBookmark}
+            title={bookmarked ? "Saved to Want to Build list" : "Save to Want to Build list"}
+            aria-label={bookmarked ? "Remove from reading list" : "Save to reading list"}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-zinc-100 transition-all cursor-pointer ${
+              bookmarked ? "text-[#111113] font-bold" : "text-zinc-400 hover:text-black"
+            }`}
+          >
+            <Bookmark
+              className={`w-3.5 h-3.5 ${
+                bookmarked ? "fill-[#111113] text-[#111113]" : ""
+              }`}
+            />
+          </button>
         </div>
 
         <div className="flex items-center gap-2.5">

@@ -10,6 +10,8 @@ import {
   IdeaNotification,
   NotificationType,
   IdeaDetailTab,
+  CuratedCollection,
+  CuratedCollectionId,
 } from "@/types/idea";
 import { isSupabaseConfigured, createClient, getCurrentProfile } from "@/lib/supabase/client";
 
@@ -345,7 +347,19 @@ export function saveNewIdea(newIdea: Idea): Idea {
 // MILESTONE 4: UPVOTES & STARS (Optimistic UI & Persistence)
 // -------------------------------------------------------------
 const STORAGE_KEY_UPVOTES = "ideatox_user_upvotes";
-let memoryUserUpvotes = new Set<string>();
+const EVENT_UPVOTES_UPDATED = "ideatox-upvotes-updated";
+const memoryUserUpvotes = new Set<string>();
+
+export function subscribeUpvotes(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => callback();
+  window.addEventListener(EVENT_UPVOTES_UPDATED, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(EVENT_UPVOTES_UPDATED, handler);
+    window.removeEventListener("storage", handler);
+  };
+}
 
 export function getUserStars(): string[] {
   if (typeof window !== "undefined") {
@@ -403,6 +417,7 @@ export async function toggleUpvote(
     try {
       const arr = Array.from(memoryUserUpvotes);
       localStorage.setItem(STORAGE_KEY_UPVOTES, JSON.stringify(arr));
+      window.dispatchEvent(new CustomEvent(EVENT_UPVOTES_UPDATED));
     } catch {
       // ignore
     }
@@ -1457,4 +1472,164 @@ export function subscribeNotifications(callback: () => void): () => void {
     window.removeEventListener("storage", handler);
   };
 }
+
+// -------------------------------------------------------------
+// MILESTONE 12: CURATED COLLECTIONS & SAVED READING LIST BOOKMARKS
+// -------------------------------------------------------------
+const BOOKMARKS_STORAGE_KEY = "ideatox_saved_reading_list";
+const EVENT_BOOKMARKS_UPDATED = "ideatox-bookmarks-updated";
+
+export const CURATED_COLLECTIONS: CuratedCollection[] = [
+  {
+    id: "weekend_quickstarts",
+    title: "Weekend Portfolio Quickstarts",
+    subtitle: "Focused web, CLI & extension builds shippable under 24–48 hours.",
+    badge: "< 48 HRS",
+  },
+  {
+    id: "autonomous_agents",
+    title: "Autonomous AI Agent Specs",
+    subtitle: "LLM pipelines, semantic routers, RAG tooling & agent workflows.",
+    badge: "AI / LLM",
+  },
+  {
+    id: "local_first",
+    title: "Local-First & Offline Systems",
+    subtitle: "CRDTs, SQLite/IndexedDB stores, P2P sync & resilient edge tools.",
+    badge: "OFFLINE-FIRST",
+  },
+  {
+    id: "hardware_iot",
+    title: "Hardware & IoT Weekend Hacks",
+    subtitle: "ESP32 telemetry, mesh sensors, solar nodes & embedded hacks.",
+    badge: "EDGE / IOT",
+  },
+  {
+    id: "want_to_build",
+    title: "Want to Build (Reading List)",
+    subtitle: "Your personal bookmarked queue of blueprints shortlisted to ship.",
+    badge: "BOOKMARKS",
+  },
+];
+
+export function matchesCuratedCollection(
+  idea: Idea,
+  collectionId: CuratedCollectionId,
+  bookmarkedSlugs: string[] = []
+): boolean {
+  const corpus = [
+    idea.title,
+    idea.hook,
+    idea.problem_statement,
+    ...(idea.suggested_stack || []),
+    ...(idea.mvp_features || []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  switch (collectionId) {
+    case "weekend_quickstarts":
+      return (
+        idea.difficulty === "beginner" ||
+        (idea.category === "cli" && idea.difficulty === "intermediate")
+      );
+    case "autonomous_agents":
+      return (
+        idea.category === "ai" ||
+        /\b(llm|rag|agent|gemini|openai|vector|embedding|whisper|ai)\b/.test(corpus)
+      );
+    case "local_first":
+      return (
+        /\b(offline|local-first|local first|sqlite|indexeddb|crdt|yjs|p2p|mesh|webrtc|wasm|tauri|bluetooth|ble)\b/.test(
+          corpus
+        )
+      );
+    case "hardware_iot":
+      return (
+        idea.category === "hardware" ||
+        /\b(esp32|mqtt|iot|lora|gpio|arduino|sensor|solar|firmware|hardware)\b/.test(corpus)
+      );
+    case "want_to_build":
+      return bookmarkedSlugs.includes(idea.slug.toLowerCase());
+  }
+}
+
+const EMPTY_BOOKMARKS: string[] = [];
+let cachedBookmarksRaw: string | null | undefined;
+let cachedBookmarksList: string[] = EMPTY_BOOKMARKS;
+
+export function getSavedBookmarks(): string[] {
+  if (typeof window === "undefined") return EMPTY_BOOKMARKS;
+  try {
+    const raw = localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+    if (raw === cachedBookmarksRaw) {
+      return cachedBookmarksList;
+    }
+    cachedBookmarksRaw = raw;
+    if (!raw) {
+      cachedBookmarksList = EMPTY_BOOKMARKS;
+      return cachedBookmarksList;
+    }
+    const parsed = JSON.parse(raw);
+    cachedBookmarksList = Array.isArray(parsed)
+      ? parsed.map((slug) => String(slug).toLowerCase())
+      : EMPTY_BOOKMARKS;
+    return cachedBookmarksList;
+  } catch {
+    return EMPTY_BOOKMARKS;
+  }
+}
+
+export function getServerSavedBookmarks(): string[] {
+  return EMPTY_BOOKMARKS;
+}
+
+export function isIdeaBookmarked(slug: string): boolean {
+  return getSavedBookmarks().includes(slug.toLowerCase());
+}
+
+export function toggleIdeaBookmark(slug: string): { bookmarked: boolean; slugs: string[] } {
+  const normalized = slug.toLowerCase();
+  const current = getSavedBookmarks();
+  const exists = current.includes(normalized);
+  const next = exists
+    ? current.filter((item) => item !== normalized)
+    : [normalized, ...current];
+
+  if (typeof window !== "undefined") {
+    try {
+      const nextRaw = JSON.stringify(next);
+      localStorage.setItem(BOOKMARKS_STORAGE_KEY, nextRaw);
+      cachedBookmarksRaw = nextRaw;
+      cachedBookmarksList = next;
+      window.dispatchEvent(new CustomEvent(EVENT_BOOKMARKS_UPDATED));
+    } catch {
+      // ignore storage quota errors
+    }
+  }
+
+  return { bookmarked: !exists, slugs: next };
+}
+
+export function resetSavedBookmarks(): void {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
+    cachedBookmarksRaw = null;
+    cachedBookmarksList = EMPTY_BOOKMARKS;
+    window.dispatchEvent(new CustomEvent(EVENT_BOOKMARKS_UPDATED));
+  }
+}
+
+export function subscribeBookmarks(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  const handler = () => callback();
+  window.addEventListener(EVENT_BOOKMARKS_UPDATED, handler);
+  window.addEventListener("storage", handler);
+  return () => {
+    window.removeEventListener(EVENT_BOOKMARKS_UPDATED, handler);
+    window.removeEventListener("storage", handler);
+  };
+}
+
+
 

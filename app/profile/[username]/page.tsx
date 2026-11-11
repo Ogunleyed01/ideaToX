@@ -28,8 +28,15 @@ import {
   Settings,
   Mail,
   MessageSquare,
+  Bookmark,
 } from "lucide-react";
-import { getUserProfile, subscribeProfileUpdates } from "@/lib/ideas";
+import {
+  getUserProfile,
+  subscribeProfileUpdates,
+  getAllIdeas,
+  getSavedBookmarks,
+  subscribeBookmarks,
+} from "@/lib/ideas";
 import { UserProfileData, Idea } from "@/types/idea";
 import { IdeaCard } from "@/components/idea-card";
 import { ForkModal } from "@/components/fork-modal";
@@ -41,8 +48,9 @@ function UserProfileContent() {
   const username = rawUsername ? decodeURIComponent(rawUsername) : "";
 
   const [profile, setProfile] = useState<UserProfileData | null>(null);
+  const [savedIdeas, setSavedIdeas] = useState<Idea[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"specs" | "forks" | "builds" | "starred" | "reputation">("specs");
+  const [activeTab, setActiveTab] = useState<"specs" | "forks" | "builds" | "starred" | "saved" | "reputation">("specs");
   const [forkModalIdea, setForkModalIdea] = useState<Idea | null>(null);
 
   // Interaction toasts
@@ -53,14 +61,32 @@ function UserProfileContent() {
     async function loadProfile() {
       if (!username) return;
       setLoading(true);
-      const data = await getUserProfile(username);
+      const [data, allIdeas] = await Promise.all([
+        getUserProfile(username),
+        getAllIdeas(),
+      ]);
       setProfile(data);
+      const savedSlugs = getSavedBookmarks();
+      setSavedIdeas(
+        (allIdeas || []).filter((i) => savedSlugs.includes(i.slug.toLowerCase()))
+      );
       setLoading(false);
     }
     loadProfile();
-    return subscribeProfileUpdates(() => {
+    const unsubProfile = subscribeProfileUpdates(() => {
       loadProfile();
     });
+    const unsubBookmarks = subscribeBookmarks(async () => {
+      const savedSlugs = getSavedBookmarks();
+      const allIdeas = await getAllIdeas();
+      setSavedIdeas(
+        (allIdeas || []).filter((i) => savedSlugs.includes(i.slug.toLowerCase()))
+      );
+    });
+    return () => {
+      unsubProfile();
+      unsubBookmarks();
+    };
   }, [username]);
 
   const handleShare = () => {
@@ -428,6 +454,7 @@ function UserProfileContent() {
               { id: "forks", label: "Remixes & Forks", icon: GitFork, count: forks.length },
               { id: "builds", label: "Shipped Builds", icon: Rocket, count: builds.length },
               { id: "starred", label: "Starred Specs", icon: Star, count: starred.length },
+              { id: "saved", label: "Reading List", icon: Bookmark, count: savedIdeas.length },
               { id: "reputation", label: "Reputation & Badges", icon: Award, count: stats.reputation },
             ].map((tab) => {
               const active = activeTab === tab.id;
@@ -659,6 +686,57 @@ function UserProfileContent() {
                       onForkClick={(i) => setForkModalIdea(i)}
                     />
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: SAVED READING LIST (WANT TO BUILD) */}
+          {activeTab === "saved" && (
+            <div className="space-y-6">
+              {savedIdeas.length === 0 ? (
+                <div className="bento-white p-12 text-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-zinc-100 border border-zinc-200 text-zinc-700 flex items-center justify-center mx-auto">
+                    <Bookmark className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-sans font-semibold text-[#111113]">
+                    Your Want-to-Build Reading List is Empty
+                  </h3>
+                  <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                    Bookmark specs from Curated Collections or individual blueprints to shortlist projects for your next weekend build.
+                  </p>
+                  <Link
+                    href="/ideas?collection=weekend_quickstarts"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#111113] text-white text-xs font-mono font-semibold hover:bg-zinc-800 transition-colors"
+                  >
+                    <span>Browse Weekend Quickstarts</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-amber-300" />
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-mono text-zinc-500">
+                      Showing {savedIdeas.length} shortlisted blueprint{savedIdeas.length === 1 ? "" : "s"}
+                    </span>
+                    <Link
+                      href="/ideas?collection=want_to_build"
+                      className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-amber-800 hover:underline"
+                    >
+                      <span>Filter in Directory</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {savedIdeas.map((idea, idx) => (
+                      <IdeaCard
+                        key={idea.slug}
+                        idea={idea}
+                        index={idx}
+                        onForkClick={(i) => setForkModalIdea(i)}
+                      />
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

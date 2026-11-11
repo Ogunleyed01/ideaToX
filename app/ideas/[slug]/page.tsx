@@ -38,6 +38,7 @@ import {
   Users,
   UserCheck,
   UserPlus,
+  Bookmark,
 } from "lucide-react";
 import {
   getIdeaBySlug,
@@ -45,6 +46,9 @@ import {
   getIdeaLineage,
   toggleUpvote,
   hasUserUpvoted,
+  isIdeaBookmarked,
+  toggleIdeaBookmark,
+  subscribeBookmarks,
   addFeatureRequest,
   reviewFeatureRequest,
   addIdeaBuild,
@@ -59,6 +63,8 @@ import { ForkModal } from "@/components/fork-modal";
 import { LineageTree } from "@/components/lineage-tree";
 import { CollaborateModal } from "@/components/collaborate-modal";
 import { SpecExportModal } from "@/components/spec-export-modal";
+import { ArchitectureTopology } from "@/components/architecture-topology";
+import { InfrastructureEstimator } from "@/components/infrastructure-estimator";
 import { getCurrentProfile } from "@/lib/supabase/client";
 
 const DIFFICULTY_CONFIG: Record<
@@ -104,22 +110,25 @@ function IdeaDetailContent() {
 
   // Active view tab (supports ?tab= deep links from Builder Inbox notifications)
   const validTabs = ["spec", "discussions", "prs", "builds", "lineage", "team"] as const;
-  const tabParam = searchParams?.get("tab");
-  const initialTab =
+  const tabParam = searchParams?.get("tab") ?? null;
+  const initialTab: (typeof validTabs)[number] =
     tabParam && (validTabs as readonly string[]).includes(tabParam)
       ? (tabParam as (typeof validTabs)[number])
       : "spec";
-  const [activeTab, setActiveTab] = useState<"spec" | "discussions" | "prs" | "builds" | "lineage" | "team">(initialTab);
-
-  useEffect(() => {
-    if (tabParam && (validTabs as readonly string[]).includes(tabParam)) {
-      setActiveTab(tabParam as (typeof validTabs)[number]);
-    }
-  }, [tabParam]);
+  const [manualTab, setManualTab] = useState<{
+    param: string | null;
+    tab: (typeof validTabs)[number];
+  } | null>(null);
+  const activeTab: (typeof validTabs)[number] =
+    manualTab && manualTab.param === tabParam ? manualTab.tab : initialTab;
+  const setActiveTab = (tab: (typeof validTabs)[number]) => {
+    setManualTab({ param: tabParam, tab });
+  };
 
   // Interaction feedback states
   const [starred, setStarred] = useState(false);
   const [starCount, setStarCount] = useState(0);
+  const [bookmarked, setBookmarked] = useState(false);
   const [copiedSpec, setCopiedSpec] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
@@ -167,6 +176,7 @@ function IdeaDetailContent() {
         setIdea(fetchedIdea);
         setStarCount(fetchedIdea.upvotes_count || 0);
         setStarred(hasUserUpvoted(fetchedIdea.slug));
+        setBookmarked(isIdeaBookmarked(fetchedIdea.slug));
         setFeatureRequests(fetchedIdea.feature_requests || []);
         setBuilds(fetchedIdea.builds || []);
         setComments(fetchedIdea.comments || []);
@@ -182,6 +192,13 @@ function IdeaDetailContent() {
       setLoading(false);
     }
     loadData();
+  }, [slug]);
+
+  useEffect(() => {
+    if (!slug) return;
+    return subscribeBookmarks(() => {
+      setBookmarked(isIdeaBookmarked(slug));
+    });
   }, [slug]);
 
   if (loading) {
@@ -242,6 +259,17 @@ function IdeaDetailContent() {
       setStarred(prevStarred);
       setStarCount(prevCount);
     }
+  };
+
+  const handleBookmark = () => {
+    const res = toggleIdeaBookmark(idea.slug);
+    setBookmarked(res.bookmarked);
+    setBannerNotice(
+      res.bookmarked
+        ? `Saved "${idea.title}" to your Want to Build reading list.`
+        : `Removed "${idea.title}" from your Want to Build reading list.`
+    );
+    setTimeout(() => setBannerNotice(null), 3500);
   };
 
   const copySpecMarkdown = () => {
@@ -479,6 +507,21 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
             >
               <Star className={`w-3.5 h-3.5 ${starred ? "fill-amber-500 text-amber-500" : ""}`} />
               <span>{starCount}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleBookmark}
+              title={bookmarked ? "Saved to Want to Build list" : "Save to Want to Build list"}
+              aria-label={bookmarked ? "Remove from reading list" : "Save to reading list"}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-semibold transition-all cursor-pointer ${
+                bookmarked
+                  ? "bg-[#111113] text-white border border-[#111113] shadow-sm"
+                  : "bg-white text-zinc-700 hover:text-black border border-zinc-200 hover:border-zinc-300 shadow-sm"
+              }`}
+            >
+              <Bookmark className={`w-3.5 h-3.5 ${bookmarked ? "fill-amber-300 text-amber-300" : ""}`} />
+              <span className="hidden md:inline">{bookmarked ? "Saved" : "Save"}</span>
             </button>
 
             {/* Collaborate Trigger */}
@@ -764,6 +807,12 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                       Curated for low latency, zero unnecessary DevOps overhead, and rapid single-developer iteration.
                     </p>
                   </div>
+
+                  {/* Interactive System Architecture Topology & Mermaid Generator */}
+                  <ArchitectureTopology idea={idea} />
+
+                  {/* Interactive Infrastructure & Monthly Hosting Cost Estimator */}
+                  <InfrastructureEstimator idea={idea} />
                 </div>
               )}
 

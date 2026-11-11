@@ -8,12 +8,15 @@ import {
   X,
   Terminal,
   Sparkles,
-  FileCode,
   GitBranch,
   Bot,
-  Layers,
+  Network,
 } from "lucide-react";
 import { Idea } from "@/types/idea";
+import {
+  estimateIdeaInfrastructure,
+  generateIdeaArchitectureTopology,
+} from "@/lib/architecture";
 
 interface SpecExportModalProps {
   idea: Idea;
@@ -22,10 +25,14 @@ interface SpecExportModalProps {
 }
 
 export function SpecExportModal({ idea, isOpen, onClose }: SpecExportModalProps) {
-  const [activeTab, setActiveTab] = useState<"cursor" | "claude" | "github">("cursor");
+  const [activeTab, setActiveTab] = useState<"cursor" | "claude" | "github" | "architecture">("cursor");
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
+
+  const topology = generateIdeaArchitectureTopology(idea);
+  const hobbyEstimate = estimateIdeaInfrastructure(idea, "hobby");
+  const prodEstimate = estimateIdeaInfrastructure(idea, "production");
 
   // 1. Cursor / Windsurf Prompt
   const cursorPrompt = `# CURSOR & WINDSURF AGENT DIRECTIVE
@@ -40,9 +47,16 @@ You are an expert full-stack engineer tasked with implementing the following ver
 - Target Geography / Region: ${idea.target_region}
 - Collaboration Policy: ${idea.collab_status}
 - Suggested Tech Stack: ${idea.suggested_stack?.join(", ") || "Next.js, TypeScript, Tailwind CSS"}
+- Sync Pattern: ${topology.syncPattern}
+- Estimated Hosting: $${hobbyEstimate.monthlyTotalUsd}/mo (Hobby) · $${prodEstimate.monthlyTotalUsd}/mo (Production)
 
 ## Problem Statement
 ${idea.problem_statement}
+
+## System Architecture Topology (Mermaid)
+\`\`\`mermaid
+${topology.mermaidCode}
+\`\`\`
 
 ## MVP Deliverables Checklist
 Implement these core user journeys sequentially with clean type definitions and responsive styling:
@@ -64,10 +78,17 @@ ${idea.hook}
 ### PROBLEM
 ${idea.problem_statement}
 
-### CONSTRAINTS
+### CONSTRAINTS & TOPOLOGY
 - Stack: ${idea.suggested_stack?.join(", ") || "Next.js, TypeScript"}
 - Category: ${idea.category}
 - Region: ${idea.target_region}
+- Topology Pattern: ${topology.syncPattern}
+- Bootstrap CLI: ${hobbyEstimate.starterCommand}
+- Packages: ${hobbyEstimate.recommendedPackages.join(", ")}
+
+\`\`\`mermaid
+${topology.mermaidCode}
+\`\`\`
 
 ### REQUIRED MVP FEATURES
 ${idea.mvp_features.map((feat, idx) => `${idx + 1}. ${feat}`).join("\n")}
@@ -84,6 +105,7 @@ ${idea.mvp_features.map((feat, idx) => `${idx + 1}. ${feat}`).join("\n")}
 > **Hook:** ${idea.hook}  
 > **Category:** \`${idea.category}\` | **Difficulty:** \`${idea.difficulty}\` | **Region:** \`${idea.target_region}\`  
 > **Suggested Stack:** ${idea.suggested_stack?.map((s) => `\`${s}\``).join(", ")}  
+> **Estimated Monthly Hosting:** \`$${hobbyEstimate.monthlyTotalUsd}/mo\` (Hobby) / \`$${prodEstimate.monthlyTotalUsd}/mo\` (Production)  
 > **IdeaToX Lineage:** https://ideatox.space/ideas/${idea.slug}
 
 ---
@@ -91,10 +113,15 @@ ${idea.mvp_features.map((feat, idx) => `${idx + 1}. ${feat}`).join("\n")}
 ## 1. Problem Statement
 ${idea.problem_statement}
 
-## 2. MVP Feature Checklist
+## 2. System Topology
+\`\`\`mermaid
+${topology.mermaidCode}
+\`\`\`
+
+## 3. MVP Feature Checklist
 ${idea.mvp_features.map((feat) => `- [ ] ${feat}`).join("\n")}
 
-## 3. Proof-of-Work Guidelines
+## 4. Proof-of-Work Guidelines
 When you finish building this blueprint:
 1. Submit your public GitHub repository link.
 2. Provide a live deployment demo URL.
@@ -102,6 +129,32 @@ When you finish building this blueprint:
 
 ---
 *Generated via [IdeaToX](https://ideatox.space) — The GitHub + Dribbble for Project Ideas.*`;
+
+  // 4. Standalone Architecture & Infrastructure Guide
+  const architectureSpec = `# ARCHITECTURE & INFRASTRUCTURE SPEC: ${idea.title}
+
+## Pattern: ${topology.syncPattern}
+${topology.summary}
+
+## Visual Topology (Mermaid)
+\`\`\`mermaid
+${topology.mermaidCode}
+\`\`\`
+
+## Data Flow Contracts
+${topology.flows.map((f) => `- **${f.from.toUpperCase()} -> ${f.to.toUpperCase()}** (\`${f.protocol}\`): ${f.payload}`).join("\n")}
+
+## Monthly Hosting Cost Breakdown
+| Tier | Compute | Database | Storage / Realtime | Services | Total / Mo |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Hobby / MVP | $${hobbyEstimate.items[0].monthlyUsd} | $${hobbyEstimate.items[1].monthlyUsd} | $${hobbyEstimate.items[2].monthlyUsd} | $${hobbyEstimate.items[3].monthlyUsd} | **$${hobbyEstimate.monthlyTotalUsd}/mo** |
+| Production | $${prodEstimate.items[0].monthlyUsd} | $${prodEstimate.items[1].monthlyUsd} | $${prodEstimate.items[2].monthlyUsd} | $${prodEstimate.items[3].monthlyUsd} | **$${prodEstimate.monthlyTotalUsd}/mo** |
+
+## Quickstart CLI & Packages
+\`\`\`bash
+${hobbyEstimate.starterCommand}
+\`\`\`
+Recommended Packages: ${hobbyEstimate.recommendedPackages.map((p) => `\`${p}\``).join(", ")}`;
 
   const getActiveContent = () => {
     switch (activeTab) {
@@ -111,6 +164,8 @@ When you finish building this blueprint:
         return claudePrompt;
       case "github":
         return githubSpec;
+      case "architecture":
+        return architectureSpec;
     }
   };
 
@@ -166,11 +221,11 @@ When you finish building this blueprint:
         </div>
 
         {/* Tab Selection */}
-        <div className="px-6 pt-4 bg-zinc-50 border-b border-zinc-200 flex items-center gap-2">
+        <div className="px-6 pt-4 bg-zinc-50 border-b border-zinc-200 flex items-center gap-2 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab("cursor")}
-            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "cursor"
                 ? "border-amber-500 text-amber-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -183,7 +238,7 @@ When you finish building this blueprint:
           <button
             type="button"
             onClick={() => setActiveTab("claude")}
-            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "claude"
                 ? "border-indigo-500 text-indigo-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -196,7 +251,7 @@ When you finish building this blueprint:
           <button
             type="button"
             onClick={() => setActiveTab("github")}
-            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors whitespace-nowrap ${
               activeTab === "github"
                 ? "border-emerald-500 text-emerald-700"
                 : "border-transparent text-zinc-500 hover:text-zinc-800"
@@ -204,6 +259,19 @@ When you finish building this blueprint:
           >
             <GitBranch size={13} />
             <span>GitHub Issue / SPEC.md</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("architecture")}
+            className={`pb-3 px-3 text-xs font-mono font-semibold flex items-center gap-1.5 border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === "architecture"
+                ? "border-[#111113] text-[#111113]"
+                : "border-transparent text-zinc-500 hover:text-zinc-800"
+            }`}
+          >
+            <Network size={13} />
+            <span>Mermaid &amp; Infra</span>
           </button>
         </div>
 
