@@ -105,6 +105,24 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname, search } = request.nextUrl;
 
+  // If Supabase falls back to Site URL (e.g. /?code=... or /auth?code=...),
+  // auto-forward the authorization code to /auth/callback so it is exchanged immediately
+  const code = request.nextUrl.searchParams.get("code");
+  const tokenHash = request.nextUrl.searchParams.get("token_hash");
+  if ((code || tokenHash) && pathname !== "/auth/callback") {
+    const callbackUrl = buildSafeRedirectUrl(
+      request,
+      "/auth/callback",
+      undefined,
+      request.nextUrl.search
+    );
+    const redirectResponse = NextResponse.redirect(callbackUrl);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+    return redirectResponse;
+  }
+
   const isProtectedRoute =
     pathname === "/ideas/new" ||
     pathname.startsWith("/ideas/new/") ||
