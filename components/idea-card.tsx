@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Star, GitFork, Terminal, ArrowUpRight, Bookmark } from "lucide-react";
 import { Idea, IdeaDifficulty } from "@/types/idea";
+import { useAuth } from "@/components/auth-provider";
 import {
   hasUserUpvoted,
   toggleUpvote,
@@ -51,6 +52,7 @@ export function IdeaCard({
   viewMode = "grid",
   onForkClick,
 }: IdeaCardProps) {
+  const { requireAuth } = useAuth();
   const starredFromStore = useSyncExternalStore(
     subscribeUpvotes,
     () => hasUserUpvoted(idea.slug),
@@ -72,12 +74,18 @@ export function IdeaCard({
   const handleBookmark = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!requireAuth("Sign in to bookmark blueprints to your Want to Build reading list.")) {
+      return;
+    }
     toggleIdeaBookmark(idea.slug);
   };
 
   const handleStar = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!requireAuth("Sign in to star blueprints on IdeaToX.")) {
+      return;
+    }
     const prevStarred = starred;
     const prevCount = starCount;
     setStarredOverride(!prevStarred);
@@ -203,6 +211,8 @@ export function IdeaCard({
               type="button"
               onClick={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+                if (!requireAuth("Sign in to branch architectural blueprints.")) return;
                 onForkClick(idea);
               }}
               className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-zinc-500 hover:text-black hover:bg-zinc-100 transition-all"

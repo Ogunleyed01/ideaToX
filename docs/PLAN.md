@@ -103,4 +103,15 @@
   - Interactive scale toggle (`Hobby / MVP`, `Production`, `High Scale`) calculating realistic monthly provider spend across Compute, Database, Storage/Realtime, and AI/Transactional services, plus recommended packages and 1-line starter bootstrap CLI commands.
 - [x] **Task 12.3:** **Visual System Architecture Topology & Mermaid Export** (`components/architecture-topology.tsx`, `components/spec-export-modal.tsx`):
   - Interactive dot-matrix node topology canvas with clickable architectural layers (`Surface`, `Compute`, `Data Store`, `External`), live payload flow protocol inspector, standalone `Mermaid .mmd` view/copy toggle, and embedded Mermaid diagrams + cost estimates in all *Export for AI* (`Cursor`, `Claude Code`, `GitHub SPEC.md`, `Mermaid & Infra`) outputs.
+
+## Milestone 13: Real Production Supabase Authentication & Persistence (Completed)
+- [x] **Task 13.1:** **Idempotent v2 Database Schema, Triggers & RLS Migration** (`supabase/migrations/20261111000000_production_auth_and_persistence.sql`, `types/database.ts`, `types/idea.ts`):
+  - Added `SECURITY DEFINER` counter/merge triggers for `stars_count`, `forks_count`, `comment_likes`, and Feature PR blueprint appends so mutations succeed cleanly under strict RLS.
+  - Extended `public.profiles` (`full_name`, `headline`, `location`, `availability`, `preferred_stack`, `x_handle`, `discord_handle`, `website_url`, `contact_email`, `updated_at`) and added RLS-protected `public.bookmarks`, `public.collaboration_requests`, and `public.notifications` tables.
+- [x] **Task 13.2:** **Global Auth Session, Developer Passport & PKCE Middleware** (`components/auth-provider.tsx`, `components/auth-passport-form.tsx`, `components/auth-modal.tsx`, `app/auth/page.tsx`, `app/auth/callback/route.ts`, `lib/supabase/middleware.ts`, `lib/supabase/client.ts`):
+  - Built unified `AuthProvider` (`useAuth()`, `requireAuth()`) with real Email/Password Sign In, Sign Up, Password Reset / Update, Magic Link OTP, live provider capability detection (`/api/supabase/status`, `/auth/v1/settings`), and ready-to-enable GitHub & Google OAuth triggers.
+  - Protected `/ideas/new`, `/settings`, and exact `/profile` at both Edge middleware and page boundaries, hardened `/auth/callback` open-redirect guards + `token_hash` verification, and ensured automatic `public.profiles` provisioning via `ensureProfileExists`.
+- [x] **Task 13.3:** **Authenticated Ownership Enforcement & Cross-Device Postgres Sync** (`lib/ideas.ts`, `components/floating-navbar.tsx`, `app/ideas/new/page.tsx`, `app/ideas/[slug]/page.tsx`, `app/settings/page.tsx`, `app/profile/**`, `components/idea-card.tsx`, `components/fork-modal.tsx`, `components/collaborate-modal.tsx`):
+  - Enforced true `user.id === idea.author_id` ownership checks for Feature PR merge/decline and collaboration request acceptance/rejection while gating all write mutations behind `requireAuth()`.
+  - Wired `@username` handle uniqueness updates with URL preview, Account Security password updates in `/settings`, owner-only `Reading List` / `EDIT PROFILE` controls on `/profile/[username]`, and live Postgres + `localStorage` cache hydration across user sessions.
 

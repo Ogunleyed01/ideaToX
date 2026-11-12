@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Search, ArrowRight, User, LogIn, Bell, Settings } from "lucide-react";
-import { AuthModal } from "@/components/auth-modal";
+import { Search, ArrowRight, User, LogIn, LogOut, Bell, Settings } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { NotificationDrawer } from "@/components/notification-drawer";
-import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
 import {
   getNotifications,
   markNotificationRead,
@@ -20,10 +19,9 @@ interface FloatingNavbarProps {
 }
 
 export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
+  const { user, profile, isAuthenticated, isConfigured, openAuthModal, signOut } = useAuth();
   const [scrolled, setScrolled] = useState(false);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [user, setUser] = useState<{ id: string; email?: string } | null>(null);
   const [notifications, setNotifications] = useState<IdeaNotification[]>([]);
 
   useEffect(() => {
@@ -35,38 +33,29 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
   }, []);
 
   useEffect(() => {
-    setNotifications(getNotifications());
-    return subscribeNotifications(() => {
-      setNotifications(getNotifications());
+    let active = true;
+    queueMicrotask(() => {
+      if (active) setNotifications(getNotifications());
     });
-  }, []);
-
-  useEffect(() => {
-    if (isSupabaseConfigured()) {
-      try {
-        const supabase = createClient();
-        supabase.auth.getUser().then(({ data }) => {
-          if (data?.user) setUser(data.user);
-        });
-
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-          setUser(session?.user ?? null);
-        });
-
-        return () => subscription.unsubscribe();
-      } catch {
-        // ignore in local offline mode
-      }
-    }
-  }, []);
+    const unsub = subscribeNotifications(() => {
+      if (active) setNotifications(getNotifications());
+    });
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, [user?.id]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const displayHandle =
+    profile?.username ||
+    (user?.email ? user.email.split("@")[0] : null) ||
+    "builder";
+  const initialChar = displayHandle.charAt(0).toUpperCase();
 
   return (
     <>
-      <header className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-xl px-4 pointer-events-none">
+      <header className="fixed top-5 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 pointer-events-none">
         <nav
           aria-label="Dynamic Island Navigation"
           className={`pointer-events-auto w-full h-12 px-3.5 rounded-full bg-[#111113] text-white border border-white/[0.12] flex items-center justify-between gap-2 transition-all duration-300 ${
@@ -133,7 +122,16 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
             </button>
 
             <button
-              onClick={() => setInboxOpen(true)}
+              onClick={() => {
+                if (isConfigured && !isAuthenticated) {
+                  openAuthModal({
+                    mode: "signin",
+                    reason: "Sign in to view your Builder Inbox notifications.",
+                  });
+                  return;
+                }
+                setInboxOpen(true);
+              }}
               type="button"
               className="relative w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
               title="Builder Inbox Notifications"
@@ -147,33 +145,62 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
               )}
             </button>
 
-            <Link
-              href="/settings"
-              className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-              title="Developer Profile Settings"
-              aria-label="Developer Profile Settings"
-            >
-              <Settings size={14} />
-            </Link>
-
-            {user ? (
+            {(isAuthenticated || !isConfigured) && (
               <Link
-                href="/profile"
-                className="w-7 h-7 rounded-full flex items-center justify-center text-amber-300 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
-                title="My Profile"
-                aria-label="My Profile"
+                href="/settings"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+                title="Developer Profile Settings"
+                aria-label="Developer Profile Settings"
               >
-                <User size={14} />
+                <Settings size={14} />
               </Link>
+            )}
+
+            {isAuthenticated ? (
+              <>
+                <Link
+                  href="/profile"
+                  className="h-7 px-2 rounded-full flex items-center gap-1.5 text-amber-200 bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
+                  title={`Signed in as @${displayHandle}`}
+                  aria-label="My Profile"
+                >
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={displayHandle}
+                      className="w-4 h-4 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full bg-amber-400/20 text-amber-300 font-mono text-[10px] font-bold flex items-center justify-center">
+                      {initialChar}
+                    </span>
+                  )}
+                  <span className="hidden md:inline font-mono text-[11px] max-w-[84px] truncate">
+                    @{displayHandle}
+                  </span>
+                  <User size={12} className="md:hidden" />
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-rose-300 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  title="Sign Out"
+                  aria-label="Sign Out"
+                >
+                  <LogOut size={13} />
+                </button>
+              </>
             ) : (
               <button
                 type="button"
-                onClick={() => setAuthModalOpen(true)}
-                className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                onClick={() => openAuthModal({ mode: "signin" })}
+                className="h-7 px-2.5 rounded-full flex items-center gap-1.5 text-zinc-200 bg-white/[0.08] hover:bg-white/[0.16] border border-white/10 transition-colors cursor-pointer text-[12px] font-medium"
                 title="Developer Sign In"
                 aria-label="Developer Sign In"
               >
-                <LogIn size={14} />
+                <LogIn size={12} />
+                <span>Sign In</span>
               </button>
             )}
 
@@ -200,12 +227,7 @@ export function FloatingNavbar({ onOpenSearch }: FloatingNavbarProps) {
         onMarkAllRead={() => setNotifications(markAllNotificationsRead())}
         onResetDemo={() => setNotifications(resetNotifications())}
       />
-
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-      />
     </>
   );
 }
+

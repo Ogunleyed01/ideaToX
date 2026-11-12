@@ -3,6 +3,7 @@ export type IdeaDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type CollabStatus = 'open' | 'seeking_cofounder';
 
 export interface IdeaAuthor {
+  id?: string;
   username: string;
   full_name?: string;
   headline?: string;
@@ -73,6 +74,7 @@ export interface UserProfileData {
 
 export interface Idea {
   id?: string;
+  author_id?: string | null;
   title: string;
   slug: string;
   hook: string;
@@ -110,7 +112,7 @@ export interface CollaborationRequest {
   created_at: string;
 }
 
-export type NotificationType = 'star' | 'fork' | 'pr' | 'collab' | 'build' | 'comment';
+export type NotificationType = 'star' | 'fork' | 'pr' | 'collab' | 'build' | 'comment' | 'system';
 
 export type IdeaDetailTab = 'spec' | 'discussions' | 'prs' | 'builds' | 'lineage' | 'team';
 

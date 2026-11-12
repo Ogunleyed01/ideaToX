@@ -46,19 +46,23 @@ export default function MarketingLandingPage() {
       [prId]: isNowApproved,
     }));
     try {
-      await reviewFeatureRequest(
+      const res = await reviewFeatureRequest(
         ideaSlug,
         prId,
         isNowApproved ? "approved" : "rejected"
       );
       setActivityToast(
-        isNowApproved
-          ? `Merged into specification: "${featureText}"`
-          : `Reverted PR approval for "${featureText}"`
+        res.success
+          ? isNowApproved
+            ? `Merged into specification: "${featureText}"`
+            : `Reverted PR approval for "${featureText}"`
+          : isNowApproved
+            ? `Previewed spec merge: "${featureText}" (sign in as author to persist)`
+            : `Previewed PR revert for "${featureText}"`
       );
       setTimeout(() => setActivityToast(null), 3500);
     } catch {
-      // ignore
+      // keep preview responsive
     }
   };
 

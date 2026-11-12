@@ -16,11 +16,14 @@ import {
   Terminal,
   Zap,
   Code2,
+  AlertCircle,
+  type LucideIcon,
 } from "lucide-react";
 import { z } from "zod";
 import { Idea, IdeaAuthor, IdeaCategory, IdeaDifficulty, CollabStatus } from "@/types/idea";
-import { getIdeaBySlug, saveNewIdea } from "@/lib/ideas";
-import { getCurrentProfile } from "@/lib/supabase/client";
+import { getIdeaBySlug, saveNewIdeaAsync } from "@/lib/ideas";
+import { useAuth } from "@/components/auth-provider";
+import { sanitizeUsernameHandle } from "@/lib/supabase/client";
 
 const IdeaSubmissionSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters").max(80, "Title is too long"),
@@ -42,7 +45,7 @@ const QUICK_PROMPTS = [
   "Chrome extension hibernating 50+ open tabs into searchable contextual workspaces",
 ];
 
-const CATEGORIES: { id: IdeaCategory; label: string; icon: any }[] = [
+const CATEGORIES: { id: IdeaCategory; label: string; icon: LucideIcon }[] = [
   { id: "web", label: "Web App", icon: Globe },
   { id: "mobile", label: "Mobile PWA", icon: Layers },
   { id: "ai", label: "AI & Agents", icon: Sparkles },
@@ -57,6 +60,14 @@ function NewIdeaFormContent() {
   const forkSlug = searchParams.get("fork");
   const promptParam = searchParams.get("prompt");
   const categoryParam = searchParams.get("category");
+  const {
+    user,
+    profile,
+    isConfigured,
+    isAuthenticated,
+    loading: authLoading,
+    requireAuth,
+  } = useAuth();
 
   // AI Prompt State
   const [aiPrompt, setAiPrompt] = useState(promptParam || "");
@@ -87,7 +98,14 @@ function NewIdeaFormContent() {
 
   // Validation & Submission
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && isConfigured && !isAuthenticated) {
+      router.replace("/auth?next=/ideas/new&reason=auth_required");
+    }
+  }, [authLoading, isConfigured, isAuthenticated, router]);
 
   // Load Parent Idea if Forking
   useEffect(() => {
@@ -106,7 +124,7 @@ function NewIdeaFormContent() {
         if (parent.suggested_stack) setStackTags(parent.suggested_stack);
       }
     }
-    loadForkParent();
+    void loadForkParent();
   }, [forkSlug]);
 
   const handleAiExpand = async (overridePrompt?: string) => {
@@ -173,6 +191,16 @@ function NewIdeaFormContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
+    setSubmitError(null);
+
+    if (
+      !requireAuth("Sign in to publish architectural blueprints to IdeaToX.", {
+        next: "/ideas/new",
+      })
+    ) {
+      return;
+    }
+
     setIsSubmitting(true);
 
     const payload = {
@@ -208,28 +236,25 @@ function NewIdeaFormContent() {
         .replace(/^-+|-+$/g, "")
         .slice(0, 50) + `-${Math.random().toString(36).substring(2, 6)}`;
 
-    let authorInfo: IdeaAuthor = {
-      username: "you_founder",
-      full_name: "Technical Author",
-      reputation_score: 150,
-    };
+    const handle =
+      profile?.username ||
+      (user?.email
+        ? sanitizeUsernameHandle(user.email.split("@")[0])
+        : isConfigured
+          ? `builder_${user?.id.slice(0, 4) || "user"}`
+          : "you_builder");
 
-    try {
-      const liveProfile = await getCurrentProfile();
-      if (liveProfile) {
-        authorInfo = {
-          username: liveProfile.username,
-          full_name: liveProfile.full_name || liveProfile.username,
-          avatar_url: liveProfile.avatar_url || undefined,
-          reputation_score: liveProfile.reputation_score || 300,
-        };
-      }
-    } catch {
-      // fallback
-    }
+    const authorInfo: IdeaAuthor = {
+      id: user?.id,
+      username: handle,
+      full_name: profile?.full_name || handle,
+      avatar_url: profile?.avatar_url || undefined,
+      reputation_score: profile?.reputation_score || 300,
+    };
 
     const newIdeaObj: Idea = {
       ...payload,
+      author_id: user?.id ?? null,
       slug: generatedSlug,
       parent_idea_id: parentIdea ? (parentIdea.id || parentIdea.slug) : null,
       upvotes_count: 1,
@@ -242,8 +267,20 @@ function NewIdeaFormContent() {
       builds: [],
     };
 
-    saveNewIdea(newIdeaObj);
-    router.push(`/ideas/${generatedSlug}`);
+    try {
+      const result = await saveNewIdeaAsync(newIdeaObj);
+      if (!result.idea) {
+        setSubmitError(result.error || "Failed to publish specification.");
+        setIsSubmitting(false);
+        return;
+      }
+      router.push(`/ideas/${result.idea.slug}`);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to publish specification."
+      );
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -675,6 +712,14 @@ function NewIdeaFormContent() {
                 </button>
               </div>
             </div>
+
+            {/* SUBMIT ERROR BANNER */}
+            {submitError && (
+              <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm flex items-center gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{submitError}</span>
+              </div>
+            )}
 
             {/* SUBMIT BUTTON & ACTIONS */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-zinc-200">

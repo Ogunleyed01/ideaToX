@@ -19,7 +19,11 @@ import {
   Sliders,
   ShieldCheck,
   User,
+  AlertCircle,
+  KeyRound,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { FloatingNavbar } from "@/components/floating-navbar";
 import { ObsidianMegaFooter } from "@/components/obsidian-mega-footer";
 import {
@@ -27,7 +31,7 @@ import {
   updateUserProfile,
   resetUserProfile,
 } from "@/lib/ideas";
-import { isSupabaseConfigured, createClient } from "@/lib/supabase/client";
+import { createClient, sanitizeUsernameHandle } from "@/lib/supabase/client";
 import { IdeaAuthor } from "@/types/idea";
 
 const AVAILABILITY_OPTIONS = [
@@ -86,11 +90,30 @@ const AVATAR_PRESETS = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const {
+    user,
+    profile: authProfile,
+    isConfigured,
+    isAuthenticated,
+    loading: authLoading,
+    refreshAuth,
+    signOut,
+  } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [hasSupabaseAuth, setHasSupabaseAuth] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [customTag, setCustomTag] = useState("");
+  const [usernameInput, setUsernameInput] = useState("you_builder");
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [form, setForm] = useState<IdeaAuthor>({
     username: "you_builder",
@@ -111,9 +134,17 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
+    if (!authLoading && isConfigured && !isAuthenticated) {
+      router.replace("/auth?next=/settings&reason=auth_required");
+    }
+  }, [authLoading, isConfigured, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (authLoading || (isConfigured && !isAuthenticated)) return;
+
     let active = true;
     async function init() {
-      const profile = await getActiveBuilderProfile();
+      const profile = await getActiveBuilderProfile(authProfile?.username);
       if (!active) return;
       setForm({
         ...profile,
@@ -130,28 +161,17 @@ export default function SettingsPage() {
         website_url: profile.website_url || "",
         location: profile.location || "",
       });
-
-      if (isSupabaseConfigured()) {
-        try {
-          const supabase = createClient();
-          const { data } = await supabase.auth.getUser();
-          if (active && data?.user) {
-            setHasSupabaseAuth(true);
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      if (active) setLoading(false);
+      setUsernameInput(profile.username || "you_builder");
+      setLoading(false);
     }
-    init();
+    void init();
     return () => {
       active = false;
     };
-  }, []);
+  }, [authLoading, isConfigured, isAuthenticated, authProfile?.username]);
 
   const showToast = (msg: string) => {
+    setErrorNotice(null);
     setSavedNotice(msg);
     setTimeout(() => {
       setSavedNotice((prev) => (prev === msg ? null : prev));
@@ -180,10 +200,12 @@ export default function SettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setErrorNotice(null);
     try {
       const updated = await updateUserProfile({
         username: form.username,
-        full_name: form.full_name?.trim() || form.username,
+        newUsername: usernameInput,
+        full_name: form.full_name?.trim() || usernameInput,
         headline: form.headline?.trim(),
         avatar_url: form.avatar_url?.trim() || undefined,
         bio: form.bio?.trim(),
@@ -197,10 +219,16 @@ export default function SettingsPage() {
         location: form.location?.trim() || "Global",
       });
       setForm(updated);
+      setUsernameInput(updated.username);
+      await refreshAuth();
       showToast(
-        hasSupabaseAuth
-          ? "Developer profile saved locally & synced to Supabase."
-          : "Developer profile updated across IdeaToX."
+        isAuthenticated
+          ? "Developer profile saved and synced with Supabase."
+          : "Developer profile updated locally across IdeaToX."
+      );
+    } catch (err) {
+      setErrorNotice(
+        err instanceof Error ? err.message : "Failed to save profile settings."
       );
     } finally {
       setSaving(false);
@@ -213,7 +241,46 @@ export default function SettingsPage() {
       ...defaults,
       preferred_stack: defaults.preferred_stack || [],
     });
-    showToast("Profile settings restored to builder defaults.");
+    setUsernameInput(defaults.username);
+    showToast("Local profile overrides restored to defaults.");
+  };
+
+  const handlePasswordUpdate = async () => {
+    setPasswordNotice(null);
+    if (!isConfigured || !user) return;
+    if (newPassword.length < 6) {
+      setPasswordNotice({
+        type: "error",
+        text: "Password must be at least 6 characters.",
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordNotice({
+        type: "error",
+        text: "Passwords do not match.",
+      });
+      return;
+    }
+    setPasswordSaving(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordNotice({
+        type: "success",
+        text: "Account password updated successfully.",
+      });
+    } catch (err) {
+      setPasswordNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to update password.",
+      });
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const selectedAvailability =
@@ -259,17 +326,17 @@ export default function SettingsPage() {
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <span
               className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full border font-mono text-[11px] font-semibold ${
-                hasSupabaseAuth
+                isAuthenticated
                   ? "bg-emerald-50 border-emerald-200 text-emerald-800"
                   : "bg-amber-50 border-amber-200 text-amber-900"
               }`}
             >
               <span
                 className={`w-2 h-2 rounded-full ${
-                  hasSupabaseAuth ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  isAuthenticated ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
                 }`}
               />
-              {hasSupabaseAuth
+              {isAuthenticated
                 ? "LIVE SUPABASE + LOCAL SYNC"
                 : "LOCAL PERSISTENCE MODE"}
             </span>
@@ -299,6 +366,13 @@ export default function SettingsPage() {
               <span>Inspect updated profile</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </Link>
+          </div>
+        )}
+
+        {errorNotice && (
+          <div className="mb-8 rounded-2xl bg-rose-50 text-rose-900 px-5 py-3.5 border border-rose-200 shadow-sm flex items-center gap-2.5 text-xs sm:text-sm font-medium">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorNotice}</span>
           </div>
         )}
 
@@ -461,8 +535,31 @@ export default function SettingsPage() {
                     </h2>
                   </div>
                   <span className="px-2.5 py-1 rounded-full bg-zinc-100 font-mono text-[11px] font-semibold text-zinc-600">
-                    @{form.username}
+                    @{sanitizeUsernameHandle(usernameInput || form.username)}
                   </span>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="settings-username"
+                    className="block font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-600 mb-1.5"
+                  >
+                    Public Developer Handle (@username)
+                  </label>
+                  <div className="flex items-center rounded-xl border border-zinc-200 bg-[#FAF9F6] px-3.5 focus-within:ring-2 focus-within:ring-amber-400/50 focus-within:border-amber-500">
+                    <span className="font-mono text-sm text-zinc-400 mr-1">@</span>
+                    <input
+                      id="settings-username"
+                      type="text"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="your_handle"
+                      className="w-full py-2.5 bg-transparent font-mono text-sm text-[#111113] focus:outline-none"
+                    />
+                  </div>
+                  <p className="mt-1 text-[11px] font-mono text-zinc-400">
+                    Profile URL: /profile/{sanitizeUsernameHandle(usernameInput || form.username)} (lowercase letters, digits, underscores)
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -777,6 +874,102 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </section>
+
+              {/* Module 4: Account Security, Password & Session */}
+              {isConfigured && user && (
+                <section className="rounded-[28px] bg-white border border-zinc-200/80 p-6 sm:p-8 shadow-sm space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-zinc-100">
+                    <div>
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-amber-700 font-bold">
+                        04 // ACCOUNT SECURITY &amp; PASSPORT
+                      </span>
+                      <h2 className="text-lg font-sans font-bold text-[#111113]">
+                        Authentication Credentials &amp; Session
+                      </h2>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 font-mono text-[11px] font-semibold text-emerald-800">
+                      {user.email || "Authenticated Session"}
+                    </span>
+                  </div>
+
+                  {passwordNotice && (
+                    <div
+                      className={`rounded-xl px-4 py-2.5 border text-xs font-medium flex items-center gap-2 ${
+                        passwordNotice.type === "success"
+                          ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                          : "bg-rose-50 border-rose-200 text-rose-900"
+                      }`}
+                    >
+                      {passwordNotice.type === "success" ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      )}
+                      <span>{passwordNotice.text}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label
+                        htmlFor="settings-new-password"
+                        className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-600 mb-1.5"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-zinc-400" />
+                        New Account Password
+                      </label>
+                      <input
+                        id="settings-new-password"
+                        type="password"
+                        minLength={6}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Minimum 6 characters"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-[#FAF9F6] text-xs font-mono text-[#111113] focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="settings-confirm-password"
+                        className="block font-mono text-[11px] font-semibold uppercase tracking-wider text-zinc-600 mb-1.5"
+                      >
+                        Confirm New Password
+                      </label>
+                      <input
+                        id="settings-confirm-password"
+                        type="password"
+                        minLength={6}
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter password"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-[#FAF9F6] text-xs font-mono text-[#111113] focus:outline-none focus:ring-2 focus:ring-amber-400/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                    <button
+                      type="button"
+                      disabled={passwordSaving || !newPassword}
+                      onClick={() => void handlePasswordUpdate()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white text-xs font-mono font-semibold transition-colors cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-amber-300" />
+                      <span>{passwordSaving ? "Updating..." : "Update Password"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void signOut()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-mono font-semibold transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out of IdeaToX</span>
+                    </button>
+                  </div>
+                </section>
+              )}
 
               {/* Save / Reset Controls */}
               <div className="rounded-[24px] bg-white border border-zinc-200/90 px-6 py-4 shadow-sm flex flex-wrap items-center justify-between gap-4">

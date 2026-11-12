@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { Idea } from "@/types/idea";
 import { addCollaborationRequest } from "@/lib/ideas";
-import { getCurrentProfile } from "@/lib/supabase/client";
+import { useAuth } from "@/components/auth-provider";
+import { sanitizeUsernameHandle } from "@/lib/supabase/client";
 
 interface CollaborateModalProps {
   idea: Idea;
@@ -46,6 +47,7 @@ export function CollaborateModal({
   onClose,
   onSuccess,
 }: CollaborateModalProps) {
+  const { user, profile, requireAuth } = useAuth();
   const [role, setRole] = useState(ROLES[0]);
   const [availability, setAvailability] = useState(AVAILABILITY_OPTIONS[0]);
   const [contactHandle, setContactHandle] = useState("");
@@ -59,6 +61,10 @@ export function CollaborateModal({
     e.preventDefault();
     setError(null);
 
+    if (!requireAuth("Sign in to pitch a collaboration request to this blueprint.")) {
+      return;
+    }
+
     if (!contactHandle.trim()) {
       setError("Please provide a contact method (GitHub, Discord, or Email)");
       return;
@@ -70,17 +76,20 @@ export function CollaborateModal({
 
     setIsSubmitting(true);
     try {
-      let applicant = undefined;
-      const profile = await getCurrentProfile();
-      if (profile) {
-        applicant = {
-          username: profile.username,
-          full_name: profile.full_name || profile.username,
-          avatar_url: profile.avatar_url || undefined,
-          reputation_score: profile.reputation_score || 300,
-          badges: profile.badges || ["Ideator"],
-        };
-      }
+      const handle =
+        profile?.username ||
+        (user?.email ? sanitizeUsernameHandle(user.email.split("@")[0]) : undefined);
+
+      const applicant = handle
+        ? {
+            id: user?.id,
+            username: handle,
+            full_name: profile?.full_name || handle,
+            avatar_url: profile?.avatar_url || undefined,
+            reputation_score: profile?.reputation_score || 300,
+            badges: profile?.badges || ["Ideator"],
+          }
+        : undefined;
 
       const res = await addCollaborationRequest(idea.slug, {
         role,
@@ -98,8 +107,8 @@ export function CollaborateModal({
       } else {
         setError("Failed to submit request. Please try again.");
       }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setIsSubmitting(false);
     }

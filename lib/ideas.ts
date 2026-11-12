@@ -1,4 +1,6 @@
 import seedIdeasRaw from "@/data/seed-ideas.json";
+import type { User } from "@supabase/supabase-js";
+import type { ProfileRow } from "@/types/database";
 import {
   Idea,
   IdeaAuthor,
@@ -13,7 +15,13 @@ import {
   CuratedCollection,
   CuratedCollectionId,
 } from "@/types/idea";
-import { isSupabaseConfigured, createClient, getCurrentProfile } from "@/lib/supabase/client";
+import {
+  isSupabaseConfigured,
+  createClient,
+  getCurrentProfile,
+  ensureProfileExists,
+  sanitizeUsernameHandle,
+} from "@/lib/supabase/client";
 
 export const MOCK_AUTHORS: IdeaAuthor[] = [
   {
@@ -200,24 +208,245 @@ let memoryIdeas: Idea[] = (seedIdeasRaw as Idea[]).map((raw, idx) => {
   };
 });
 
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value?: string | null): value is string {
+  return Boolean(value && UUID_REGEX.test(value));
+}
+
+let activeSessionUser: User | null = null;
+let activeSessionProfile: ProfileRow | null = null;
+
+export function profileRowToAuthor(row: ProfileRow): IdeaAuthor {
+  return {
+    id: row.id,
+    username: row.username,
+    full_name: row.full_name || row.username,
+    headline: row.headline || undefined,
+    availability: row.availability || undefined,
+    preferred_stack: row.preferred_stack || undefined,
+    avatar_url: row.avatar_url || undefined,
+    bio: row.bio || undefined,
+    email: row.contact_email || undefined,
+    github_url: row.github_url || undefined,
+    twitter_url: row.twitter_url || undefined,
+    discord_url: row.discord_url || undefined,
+    website_url: row.website_url || undefined,
+    location: row.location || "Global",
+    joined_date: row.created_at
+      ? new Date(row.created_at).toLocaleDateString("en-US", {
+          month: "long",
+          year: "numeric",
+        })
+      : "Recent Builder",
+    reputation_score: row.reputation_score ?? 300,
+    badges: row.badges?.length ? row.badges : ["Ideator"],
+  };
+}
+
+export function setActiveAuthSession(
+  user: User | null,
+  profile: ProfileRow | null
+): void {
+  activeSessionUser = user;
+  activeSessionProfile = profile;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("ideatox:profile-updated"));
+  }
+}
+
+export async function resolveAuthenticatedActor(): Promise<{
+  user: User;
+  profile: ProfileRow | null;
+  author: IdeaAuthor;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    let profile = activeSessionProfile?.id === user.id ? activeSessionProfile : null;
+    if (!profile) {
+      profile = await ensureProfileExists(user);
+      activeSessionUser = user;
+      activeSessionProfile = profile;
+    }
+
+    if (profile) {
+      return {
+        user,
+        profile,
+        author: profileRowToAuthor(profile),
+      };
+    }
+
+    const fallbackHandle = sanitizeUsernameHandle(
+      (user.email ? user.email.split("@")[0] : "") || `builder_${user.id.slice(0, 4)}`
+    );
+    return {
+      user,
+      profile: null,
+      author: {
+        id: user.id,
+        username: fallbackHandle,
+        full_name: fallbackHandle,
+        reputation_score: 300,
+        badges: ["Ideator"],
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+function upsertMemoryIdea(idea: Idea): void {
+  const idx = memoryIdeas.findIndex(
+    (m) => m.slug.toLowerCase() === idea.slug.toLowerCase()
+  );
+  if (idx !== -1) {
+    const existing = memoryIdeas[idx];
+    memoryIdeas[idx] = {
+      ...existing,
+      ...idea,
+      author: idea.author || existing.author,
+      feature_requests: idea.feature_requests?.length
+        ? idea.feature_requests
+        : existing.feature_requests,
+      builds: idea.builds?.length ? idea.builds : existing.builds,
+      comments: idea.comments?.length ? idea.comments : existing.comments,
+      collaboration_requests: idea.collaboration_requests?.length
+        ? idea.collaboration_requests
+        : existing.collaboration_requests,
+    };
+  } else {
+    memoryIdeas = [idea, ...memoryIdeas];
+  }
+}
+
+function formatSupabaseIdeaRow(row: Record<string, unknown>): Idea {
+  const rawFeatures = row.mvp_features;
+  const parsedFeatures = Array.isArray(rawFeatures)
+    ? rawFeatures.map(String)
+    : typeof rawFeatures === "string"
+      ? (JSON.parse(rawFeatures || "[]") as string[])
+      : [];
+
+  const authorRow = row.author as ProfileRow | null | undefined;
+  const author: IdeaAuthor = authorRow
+    ? profileRowToAuthor(authorRow)
+    : MOCK_AUTHORS[0];
+
+  const featureRequestsRaw = (row.feature_requests || []) as Array<Record<string, unknown>>;
+  const buildsRaw = (row.idea_builds || []) as Array<Record<string, unknown>>;
+  const commentsRaw = (row.comments || []) as Array<Record<string, unknown>>;
+  const collabRaw = (row.collaboration_requests || []) as Array<Record<string, unknown>>;
+
+  const mappedCollabs: CollaborationRequest[] = collabRaw.map((cr) => {
+    const appRow = cr.applicant as ProfileRow | null | undefined;
+    return {
+      id: String(cr.id),
+      idea_id: String(cr.idea_id),
+      applicant: appRow ? profileRowToAuthor(appRow) : MOCK_AUTHORS[0],
+      role: String(cr.role || "Collaborator"),
+      contact_handle: String(cr.contact_handle || ""),
+      availability: String(cr.availability || "Flexible"),
+      pitch: String(cr.pitch || ""),
+      status: (cr.status as CollaborationRequest["status"]) || "pending",
+      created_at: String(cr.created_at || "Recent"),
+    };
+  });
+
+  const acceptedTeamMembers = mappedCollabs
+    .filter((c) => c.status === "accepted")
+    .map((c) => c.applicant);
+
+  return {
+    id: String(row.id),
+    author_id: (row.author_id as string | null) ?? authorRow?.id ?? null,
+    parent_idea_id: (row.parent_idea_id as string | null) ?? null,
+    parent_slug: (row.parent_slug as string | null) ?? null,
+    title: String(row.title),
+    slug: String(row.slug),
+    hook: String(row.hook),
+    problem_statement: String(row.problem_statement),
+    mvp_features: parsedFeatures,
+    category: row.category as Idea["category"],
+    difficulty: row.difficulty as Idea["difficulty"],
+    target_region: String(row.target_region || "Global"),
+    collab_status: (row.collab_status as Idea["collab_status"]) || "open",
+    suggested_stack: Array.isArray(row.suggested_stack)
+      ? (row.suggested_stack as string[])
+      : [],
+    upvotes_count: Number(row.upvotes_count ?? 0),
+    forks_count: Number(row.forks_count ?? 0),
+    builds_count: Number(row.builds_count ?? 0),
+    is_seeded: Boolean(row.is_seeded),
+    created_at: String(row.created_at || new Date().toISOString()),
+    author,
+    feature_requests: featureRequestsRaw.map((pr) => ({
+      id: String(pr.id),
+      idea_id: String(pr.idea_id),
+      proposer: pr.proposer
+        ? profileRowToAuthor(pr.proposer as ProfileRow)
+        : MOCK_AUTHORS[0],
+      action_type: pr.action_type as FeatureRequest["action_type"],
+      feature_text: String(pr.feature_text),
+      rationale: (pr.rationale as string | undefined) || undefined,
+      status: (pr.status as FeatureRequest["status"]) || "pending",
+      created_at: String(pr.created_at || "Recent"),
+    })),
+    builds: buildsRaw.map((b) => ({
+      id: String(b.id),
+      idea_id: String(b.idea_id),
+      builder: b.builder
+        ? profileRowToAuthor(b.builder as ProfileRow)
+        : MOCK_AUTHORS[0],
+      status: (b.status as IdeaBuild["status"]) || "building",
+      repo_url: String(b.repo_url),
+      live_url: (b.live_url as string | undefined) || undefined,
+      notes: (b.notes as string | undefined) || undefined,
+      created_at: String(b.created_at || "Recent"),
+    })),
+    comments: commentsRaw.map((c) => ({
+      id: String(c.id),
+      idea_id: String(c.idea_id),
+      user: c.user
+        ? profileRowToAuthor(c.user as ProfileRow)
+        : MOCK_AUTHORS[0],
+      content: String(c.content),
+      parent_comment_id: (c.parent_comment_id as string | null) ?? null,
+      likes_count: Number(c.likes_count ?? 0),
+      created_at: String(c.created_at || "Recent"),
+    })),
+    collaboration_requests: mappedCollabs,
+    team_members: acceptedTeamMembers,
+  };
+}
+
 export async function getAllIdeas(): Promise<Idea[]> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = createClient();
       const { data, error } = await supabase
         .from("ideas")
-        .select(`
+        .select(
+          `
           *,
           author:profiles(*)
-        `)
+        `
+        )
         .order("created_at", { ascending: false });
 
       if (!error && data && data.length > 0) {
-        return data.map((d: any) => ({
-          ...d,
-          mvp_features: Array.isArray(d.mvp_features) ? d.mvp_features : JSON.parse(d.mvp_features || "[]"),
-          author: d.author || MOCK_AUTHORS[0],
-        }));
+        const formatted = (data as unknown as Array<Record<string, unknown>>).map(
+          formatSupabaseIdeaRow
+        );
+        formatted.forEach(upsertMemoryIdea);
+        return formatted;
       }
     } catch (err) {
       console.warn("Supabase fetch failed, falling back to local memory:", err);
@@ -232,39 +461,46 @@ export async function getIdeaBySlug(slug: string): Promise<Idea | null> {
   if (isSupabaseConfigured()) {
     try {
       const supabase = createClient();
-      const { data, error } = await supabase
+      // Attempt query with v2 collaboration_requests join first; fall back seamlessly if v2 SQL migration hasn't run yet
+      let { data, error } = await supabase
         .from("ideas")
-        .select(`
+        .select(
+          `
           *,
           author:profiles(*),
           feature_requests(*, proposer:profiles(*)),
           idea_builds(*, builder:profiles(*)),
-          comments(*, user:profiles(*))
-        `)
+          comments(*, user:profiles(*)),
+          collaboration_requests(*, applicant:profiles(*))
+        `
+        )
         .eq("slug", normalized)
         .maybeSingle();
 
+      if (error && /collaboration_requests/i.test(error.message)) {
+        const coreRes = await supabase
+          .from("ideas")
+          .select(
+            `
+            *,
+            author:profiles(*),
+            feature_requests(*, proposer:profiles(*)),
+            idea_builds(*, builder:profiles(*)),
+            comments(*, user:profiles(*))
+          `
+          )
+          .eq("slug", normalized)
+          .maybeSingle();
+        data = coreRes.data as typeof data;
+        error = coreRes.error;
+      }
+
       if (!error && data) {
-        const row = data as any;
-        return {
-          ...row,
-          mvp_features: Array.isArray(row.mvp_features) ? row.mvp_features : JSON.parse(row.mvp_features || "[]"),
-          author: row.author || MOCK_AUTHORS[0],
-          feature_requests: (row.feature_requests || []).map((pr: any) => ({
-            ...pr,
-            proposer: pr.proposer || MOCK_AUTHORS[0],
-          })),
-          builds: (row.idea_builds || []).map((b: any) => ({
-            ...b,
-            builder: b.builder || MOCK_AUTHORS[0],
-          })),
-          comments: (row.comments || []).map((c: any) => ({
-            ...c,
-            user: c.user || MOCK_AUTHORS[0],
-          })),
-          collaboration_requests: row.collaboration_requests || [],
-          team_members: row.team_members || [],
-        };
+        const formatted = formatSupabaseIdeaRow(
+          data as unknown as Record<string, unknown>
+        );
+        upsertMemoryIdea(formatted);
+        return formatted;
       }
     } catch (err) {
       console.warn("Supabase getIdeaBySlug failed, falling back to local memory:", err);
@@ -275,14 +511,106 @@ export async function getIdeaBySlug(slug: string): Promise<Idea | null> {
   return found || null;
 }
 
-export async function getRelatedIdeas(currentSlug: string, category: string, limit = 3): Promise<Idea[]> {
+export async function getRelatedIdeas(
+  arg1: string,
+  arg2: string,
+  limit = 3
+): Promise<Idea[]> {
+  const validCategories = new Set(["web", "mobile", "ai", "cli", "hardware", "extension"]);
+  const category = validCategories.has(arg1) ? arg1 : arg2;
+  const currentSlug = validCategories.has(arg1) ? arg2 : arg1;
   return memoryIdeas
     .filter((i) => i.slug !== currentSlug && i.category === category)
     .slice(0, limit);
 }
 
-export function saveNewIdea(newIdea: Idea): Idea {
-  // If this idea has a parent, increment the parent's forks_count
+export async function saveNewIdeaAsync(
+  newIdea: Idea
+): Promise<{ idea: Idea | null; error?: string }> {
+  const configured = isSupabaseConfigured();
+
+  if (configured) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      return {
+        idea: null,
+        error: "Sign in to publish or fork a specification blueprint.",
+      };
+    }
+
+    const supabase = createClient();
+
+    // Resolve parent_idea_id UUID if forked from parent_slug
+    let parentUuid: string | null = isUuid(newIdea.parent_idea_id)
+      ? newIdea.parent_idea_id
+      : null;
+
+    if (!parentUuid && newIdea.parent_slug) {
+      const { data: parentRow } = await supabase
+        .from("ideas")
+        .select("id")
+        .eq("slug", newIdea.parent_slug.toLowerCase())
+        .maybeSingle();
+      if (parentRow?.id) {
+        parentUuid = parentRow.id;
+      }
+    }
+
+    const { data: insertedRow, error } = await supabase
+      .from("ideas")
+      .insert({
+        title: newIdea.title,
+        slug: newIdea.slug,
+        author_id: actor.user.id,
+        parent_idea_id: parentUuid,
+        parent_slug: newIdea.parent_slug || null,
+        hook: newIdea.hook,
+        problem_statement: newIdea.problem_statement,
+        mvp_features: newIdea.mvp_features,
+        category: newIdea.category,
+        difficulty: newIdea.difficulty,
+        target_region: newIdea.target_region,
+        collab_status: newIdea.collab_status,
+        suggested_stack: newIdea.suggested_stack,
+        is_seeded: false,
+      })
+      .select("*, author:profiles(*)")
+      .maybeSingle();
+
+    if (error || !insertedRow) {
+      return {
+        idea: null,
+        error: error?.message || "Failed to persist specification to Supabase.",
+      };
+    }
+
+    const formatted = formatSupabaseIdeaRow(
+      insertedRow as unknown as Record<string, unknown>
+    );
+    upsertMemoryIdea(formatted);
+
+    if (parentUuid && newIdea.parent_slug) {
+      const parentMem = memoryIdeas.find(
+        (i) => i.slug.toLowerCase() === newIdea.parent_slug?.toLowerCase()
+      );
+      if (parentMem) {
+        parentMem.forks_count = (parentMem.forks_count || 0) + 1;
+      }
+      addNotification({
+        type: "fork",
+        title: `Forked "${formatted.title}"`,
+        message: `Published a new remix branch from @${formatted.parent_slug}.`,
+        idea_slug: formatted.slug,
+        idea_title: formatted.title,
+        actor: formatted.author,
+        target_tab: "lineage",
+      });
+    }
+
+    return { idea: formatted };
+  }
+
+  // Offline unconfigured sandbox fallback
   if (newIdea.parent_slug) {
     const parent = memoryIdeas.find(
       (i) => i.slug.toLowerCase() === newIdea.parent_slug?.toLowerCase()
@@ -311,35 +639,11 @@ export function saveNewIdea(newIdea: Idea): Idea {
     });
   }
 
-  // If Supabase is configured, sync to Supabase
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
-        const authorId = data?.user?.id || null;
-        supabase.from("ideas").insert({
-          title: newIdea.title,
-          slug: newIdea.slug,
-          author_id: authorId,
-          hook: newIdea.hook,
-          problem_statement: newIdea.problem_statement,
-          mvp_features: newIdea.mvp_features,
-          category: newIdea.category,
-          difficulty: newIdea.difficulty,
-          target_region: newIdea.target_region,
-          collab_status: newIdea.collab_status,
-          suggested_stack: newIdea.suggested_stack,
-          parent_slug: newIdea.parent_slug,
-          is_seeded: false,
-        } as any).then(({ error }) => {
-          if (error) console.warn("Supabase insert idea error:", error.message);
-        });
-      });
-    } catch {
-      // ignore
-    }
-  }
+  return { idea: enrichedIdea };
+}
 
+export function saveNewIdea(newIdea: Idea): Idea {
+  void saveNewIdeaAsync(newIdea);
   return newIdea;
 }
 
@@ -396,10 +700,87 @@ export async function toggleUpvote(
   slug: string
 ): Promise<{ starred: boolean; upvotes_count: number }> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to star blueprints.");
+    }
+
+    const currentCount = idea?.upvotes_count ?? 42;
+    const isCurrentlyStarred = hasUserUpvoted(normalized);
+    const newStarred = !isCurrentlyStarred;
+    const newCount = newStarred ? currentCount + 1 : Math.max(0, currentCount - 1);
+
+    if (idea) {
+      idea.upvotes_count = newCount;
+    }
+
+    if (newStarred) {
+      memoryUserUpvotes.add(normalized);
+    } else {
+      memoryUserUpvotes.delete(normalized);
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        const arr = Array.from(memoryUserUpvotes);
+        localStorage.setItem(STORAGE_KEY_UPVOTES, JSON.stringify(arr));
+        window.dispatchEvent(new CustomEvent(EVENT_UPVOTES_UPDATED));
+      } catch {
+        // ignore storage quota errors
+      }
+    }
+
+    if (idea && isUuid(idea.id)) {
+      const supabase = createClient();
+      if (newStarred) {
+        const { error } = await supabase
+          .from("idea_upvotes")
+          .upsert(
+            { user_id: actor.user.id, idea_id: idea.id },
+            { onConflict: "user_id,idea_id" }
+          );
+        if (error) {
+          console.warn("Supabase upvote insert error:", error.message);
+        }
+      } else {
+        const { error } = await supabase
+          .from("idea_upvotes")
+          .delete()
+          .match({ user_id: actor.user.id, idea_id: idea.id });
+        if (error) {
+          console.warn("Supabase upvote delete error:", error.message);
+        }
+      }
+    }
+
+    if (newStarred && idea) {
+      addNotification({
+        type: "star",
+        title: `Starred "${idea.title}"`,
+        message: `Added blueprint to your starred collection (${newCount} total stars).`,
+        idea_slug: idea.slug,
+        idea_title: idea.title,
+        actor: actor.author,
+        target_tab: "spec",
+        read: true,
+        recipient_id: idea.author_id || idea.author?.id,
+      });
+    }
+
+    return {
+      starred: newStarred,
+      upvotes_count: newCount,
+    };
+  }
+
+  // Offline unconfigured sandbox fallback
   const currentCount = idea?.upvotes_count ?? 42;
   const isCurrentlyStarred = hasUserUpvoted(normalized);
-
   const newStarred = !isCurrentlyStarred;
   const newCount = newStarred ? currentCount + 1 : Math.max(0, currentCount - 1);
 
@@ -418,26 +799,6 @@ export async function toggleUpvote(
       const arr = Array.from(memoryUserUpvotes);
       localStorage.setItem(STORAGE_KEY_UPVOTES, JSON.stringify(arr));
       window.dispatchEvent(new CustomEvent(EVENT_UPVOTES_UPDATED));
-    } catch {
-      // ignore
-    }
-  }
-
-  if (isSupabaseConfigured() && idea?.id) {
-    try {
-      const supabase = createClient();
-      (supabase as any).from("ideas").update({ upvotes_count: newCount }).eq("id", idea.id).then(({ error }: any) => {
-        if (error) console.warn("Supabase upvotes_count update error:", error.message);
-      });
-      supabase.auth.getUser().then(({ data }) => {
-        if (data?.user?.id && idea?.id) {
-          if (newStarred) {
-            (supabase as any).from("idea_upvotes").insert({ user_id: data.user.id, idea_id: idea.id }).then(() => {});
-          } else {
-            (supabase as any).from("idea_upvotes").delete().match({ user_id: data.user.id, idea_id: idea.id }).then(() => {});
-          }
-        }
-      });
     } catch {
       // ignore
     }
@@ -474,8 +835,71 @@ export async function addFeatureRequest(
   }
 ): Promise<FeatureRequest | null> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
   if (!idea) return null;
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to propose a Feature Pull Request.");
+    }
+
+    let persistedId = `pr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let createdAt = "Just now";
+
+    if (isUuid(idea.id)) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("feature_requests")
+        .insert({
+          idea_id: idea.id,
+          proposer_id: actor.user.id,
+          action_type: req.action_type,
+          feature_text: req.feature_text.trim(),
+          rationale: req.rationale?.trim() || null,
+          status: "pending",
+        })
+        .select("id, created_at")
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (data?.id) {
+        persistedId = data.id;
+        createdAt = data.created_at || createdAt;
+      }
+    }
+
+    const newPR: FeatureRequest = {
+      id: persistedId,
+      idea_id: idea.slug,
+      proposer: actor.author,
+      action_type: req.action_type,
+      feature_text: req.feature_text.trim(),
+      rationale:
+        req.rationale?.trim() || "Proposed to improve MVP architectural scope.",
+      status: "pending",
+      created_at: createdAt,
+    };
+
+    idea.feature_requests = [newPR, ...(idea.feature_requests || [])];
+
+    addNotification({
+      type: "pr",
+      title: `Feature PR Opened on "${idea.title}"`,
+      message: `${req.action_type === "add_feature" ? "+ Add" : "- Trim"}: ${newPR.feature_text}`,
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      actor: actor.author,
+      target_tab: "prs",
+      recipient_id: idea.author_id || idea.author?.id,
+    });
+
+    return newPR;
+  }
 
   const newPR: FeatureRequest = {
     id: `pr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -500,29 +924,6 @@ export async function addFeatureRequest(
     target_tab: "prs",
   });
 
-  if (isSupabaseConfigured() && idea?.id) {
-    try {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
-        const userId = data?.user?.id;
-        if (userId && idea?.id) {
-          (supabase as any).from("feature_requests").insert({
-            idea_id: idea.id,
-            proposer_id: userId,
-            action_type: req.action_type,
-            feature_text: req.feature_text.trim(),
-            rationale: req.rationale?.trim() || null,
-            status: "pending",
-          }).then(({ error }: any) => {
-            if (error) console.warn("Supabase insert PR error:", error.message);
-          });
-        }
-      });
-    } catch {
-      // ignore
-    }
-  }
-
   return newPR;
 }
 
@@ -532,39 +933,97 @@ export async function reviewFeatureRequest(
   decision: "approved" | "rejected"
 ): Promise<{ success: boolean; idea: Idea | null; message: string }> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
-  if (!idea) return { success: false, idea: null, message: "Idea blueprint not found" };
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
+  if (!idea) {
+    return { success: false, idea: null, message: "Idea blueprint not found" };
+  }
 
   const pr = idea.feature_requests?.find((p) => p.id === prId);
-  if (!pr) return { success: false, idea, message: "Pull request not found" };
+  if (!pr) {
+    return { success: false, idea, message: "Pull request not found" };
+  }
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      return {
+        success: false,
+        idea,
+        message: "Sign in as the specification author to review Feature PRs.",
+      };
+    }
+
+    const ownerId = idea.author_id || idea.author?.id;
+    if (ownerId && ownerId !== actor.user.id) {
+      return {
+        success: false,
+        idea,
+        message: "Only the specification author can approve or decline Feature PRs.",
+      };
+    }
+
+    const nextFeatures = [...idea.mvp_features];
+    if (decision === "approved") {
+      if (pr.action_type === "add_feature") {
+        if (!nextFeatures.includes(pr.feature_text)) {
+          nextFeatures.push(pr.feature_text);
+        }
+      } else if (pr.action_type === "remove_feature") {
+        const filtered = nextFeatures.filter(
+          (f) => f.toLowerCase().trim() !== pr.feature_text.toLowerCase().trim()
+        );
+        nextFeatures.length = 0;
+        nextFeatures.push(...filtered);
+      }
+    }
+
+    const supabase = createClient();
+    if (isUuid(prId)) {
+      const { error: prErr } = await supabase
+        .from("feature_requests")
+        .update({ status: decision })
+        .eq("id", prId);
+      if (prErr) {
+        return { success: false, idea, message: prErr.message };
+      }
+    }
+
+    if (decision === "approved" && isUuid(idea.id)) {
+      const { error: ideaErr } = await supabase
+        .from("ideas")
+        .update({ mvp_features: nextFeatures })
+        .eq("id", idea.id);
+      if (ideaErr) {
+        return { success: false, idea, message: ideaErr.message };
+      }
+    }
+
+    pr.status = decision;
+    idea.mvp_features = nextFeatures;
+
+    return {
+      success: true,
+      idea: { ...idea },
+      message:
+        decision === "approved"
+          ? `Merged PR: ${pr.feature_text} ${pr.action_type === "add_feature" ? "added to" : "removed from"} MVP specifications.`
+          : `Declined PR: ${pr.feature_text}.`,
+    };
+  }
 
   pr.status = decision;
 
   if (decision === "approved") {
     if (pr.action_type === "add_feature") {
-      // Check if already in mvp_features
       if (!idea.mvp_features.includes(pr.feature_text)) {
         idea.mvp_features = [...idea.mvp_features, pr.feature_text];
       }
     } else if (pr.action_type === "remove_feature") {
-      // Remove feature from mvp_features
       idea.mvp_features = idea.mvp_features.filter(
         (f) => f.toLowerCase().trim() !== pr.feature_text.toLowerCase().trim()
       );
-    }
-  }
-
-  if (isSupabaseConfigured() && idea?.id) {
-    try {
-      const supabase = createClient();
-      if (/^[0-9a-fA-F-]{36}$/.test(prId)) {
-        (supabase as any).from("feature_requests").update({ status: decision }).eq("id", prId).then(() => {});
-      }
-      if (decision === "approved") {
-        (supabase as any).from("ideas").update({ mvp_features: idea.mvp_features }).eq("id", idea.id).then(() => {});
-      }
-    } catch {
-      // ignore
     }
   }
 
@@ -592,8 +1051,79 @@ export async function addIdeaBuild(
   }
 ): Promise<{ success: boolean; build: IdeaBuild | null; builds_count: number }> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
   if (!idea) return { success: false, build: null, builds_count: 0 };
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to link a shipped repository or demo build.");
+    }
+
+    const resolvedStatus =
+      buildData.status || (buildData.live_url ? "shipped" : "building");
+    let buildId = `build-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let createdAt = "Just now";
+
+    if (isUuid(idea.id)) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("idea_builds")
+        .insert({
+          idea_id: idea.id,
+          builder_id: actor.user.id,
+          status: resolvedStatus,
+          repo_url: buildData.repo_url.trim(),
+          live_url: buildData.live_url?.trim() || null,
+          notes: buildData.notes?.trim() || null,
+        })
+        .select("id, created_at")
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (data?.id) {
+        buildId = data.id;
+        createdAt = data.created_at || createdAt;
+      }
+    }
+
+    const newBuild: IdeaBuild = {
+      id: buildId,
+      idea_id: idea.slug,
+      builder: actor.author,
+      status: resolvedStatus,
+      repo_url: buildData.repo_url.trim(),
+      live_url: buildData.live_url?.trim() || undefined,
+      notes:
+        buildData.notes?.trim() ||
+        "Active implementation linked via IdeaToX Showcase.",
+      created_at: createdAt,
+    };
+
+    idea.builds = [newBuild, ...(idea.builds || [])];
+    idea.builds_count = (idea.builds_count || 0) + 1;
+
+    addNotification({
+      type: "build",
+      title: `${newBuild.status === "shipped" ? "Shipped Demo" : "Build Linked"}: "${idea.title}"`,
+      message: newBuild.notes || `Linked implementation repo ${newBuild.repo_url}.`,
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      actor: actor.author,
+      target_tab: "builds",
+      recipient_id: idea.author_id || idea.author?.id,
+    });
+
+    return {
+      success: true,
+      build: newBuild,
+      builds_count: idea.builds_count,
+    };
+  }
 
   const newBuild: IdeaBuild = {
     id: `build-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -602,7 +1132,9 @@ export async function addIdeaBuild(
     status: buildData.status || (buildData.live_url ? "shipped" : "building"),
     repo_url: buildData.repo_url.trim(),
     live_url: buildData.live_url?.trim() || undefined,
-    notes: buildData.notes?.trim() || "Active implementation linked via IdeaToX Showcase.",
+    notes:
+      buildData.notes?.trim() ||
+      "Active implementation linked via IdeaToX Showcase.",
     created_at: "Just now",
   };
 
@@ -618,30 +1150,6 @@ export async function addIdeaBuild(
     actor: newBuild.builder,
     target_tab: "builds",
   });
-
-  if (isSupabaseConfigured() && idea?.id) {
-    try {
-      const supabase = createClient();
-      supabase.auth.getUser().then(({ data }) => {
-        const userId = data?.user?.id;
-        if (userId && idea?.id) {
-          (supabase as any).from("idea_builds").insert({
-            idea_id: idea.id,
-            builder_id: userId,
-            status: newBuild.status,
-            repo_url: newBuild.repo_url,
-            live_url: newBuild.live_url || null,
-            notes: newBuild.notes || null,
-          }).then(({ error }: any) => {
-            if (error) console.warn("Supabase insert build error:", error.message);
-          });
-        }
-      });
-      (supabase as any).from("ideas").update({ builds_count: idea.builds_count }).eq("id", idea.id).then(() => {});
-    } catch {
-      // ignore
-    }
-  }
 
   return {
     success: true,
@@ -662,6 +1170,21 @@ export async function updateIdeaBuildStatus(
 
   const build = idea.builds?.find((b) => b.id === buildId);
   if (!build) return false;
+
+  if (isSupabaseConfigured() && isUuid(buildId)) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) return false;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("idea_builds")
+      .update({
+        status: newStatus,
+        ...(liveUrl ? { live_url: liveUrl.trim() } : {}),
+      })
+      .eq("id", buildId)
+      .eq("builder_id", actor.user.id);
+    if (error) return false;
+  }
 
   build.status = newStatus;
   if (liveUrl) build.live_url = liveUrl.trim();
@@ -776,6 +1299,14 @@ export async function createQuickFork(
   const parent = await getIdeaBySlug(parentSlug);
   if (!parent) return null;
 
+  const actor = isSupabaseConfigured()
+    ? await resolveAuthenticatedActor()
+    : null;
+
+  if (isSupabaseConfigured() && !actor) {
+    throw new Error("Sign in to fork blueprint specifications.");
+  }
+
   const generatedSlug =
     pivotData.remixedTitle
       .toLowerCase()
@@ -785,24 +1316,32 @@ export async function createQuickFork(
 
   const forkedIdea: Idea = {
     ...parent,
+    id: undefined,
     slug: generatedSlug,
     title: pivotData.remixedTitle.trim(),
     hook: `[Fork of @${parent.slug}] ${parent.hook} ${pivotData.pivotNotes ? `— Pivot: ${pivotData.pivotNotes}` : ""}`,
     target_region: pivotData.targetRegion || parent.target_region,
     parent_slug: parent.slug,
     parent_idea_id: parent.id || parent.slug,
+    author_id: actor?.user.id ?? null,
     upvotes_count: 1,
     forks_count: 0,
     builds_count: 0,
     is_seeded: false,
     created_at: new Date().toISOString(),
-    author: getCurrentActorAuthor(),
+    author: actor?.author || getCurrentActorAuthor(),
     feature_requests: [],
     builds: [],
+    comments: [],
+    collaboration_requests: [],
+    team_members: [],
   };
 
-  saveNewIdea(forkedIdea);
-  return forkedIdea;
+  const { idea: saved, error } = await saveNewIdeaAsync(forkedIdea);
+  if (error) {
+    throw new Error(error);
+  }
+  return saved;
 }
 
 // -------------------------------------------------------------
@@ -821,8 +1360,72 @@ export async function addIdeaComment(
   user?: IdeaAuthor
 ): Promise<IdeaComment | null> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
   if (!idea) return null;
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to post architectural comments.");
+    }
+
+    let persistedId = `c-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let createdAt = "Just now";
+    const resolvedParentCommentId = isUuid(parentCommentId)
+      ? parentCommentId
+      : null;
+
+    if (isUuid(idea.id)) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("comments")
+        .insert({
+          idea_id: idea.id,
+          user_id: actor.user.id,
+          content: content.trim(),
+          parent_comment_id: resolvedParentCommentId,
+          likes_count: 0,
+        })
+        .select("id, created_at")
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (data?.id) {
+        persistedId = data.id;
+        createdAt = data.created_at || createdAt;
+      }
+    }
+
+    const newComment: IdeaComment = {
+      id: persistedId,
+      idea_id: idea.slug,
+      user: actor.author,
+      content: content.trim(),
+      created_at: createdAt,
+      parent_comment_id: parentCommentId || null,
+      likes_count: 0,
+      user_liked: false,
+    };
+
+    idea.comments = [...(idea.comments || []), newComment];
+
+    addNotification({
+      type: "comment",
+      title: `${parentCommentId ? "Reply Posted" : "Discussion Note"} on "${idea.title}"`,
+      message: newComment.content.slice(0, 110),
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      actor: actor.author,
+      target_tab: "discussions",
+      recipient_id: idea.author_id || idea.author?.id,
+    });
+
+    return newComment;
+  }
 
   const newComment: IdeaComment = {
     id: `c-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -846,23 +1449,6 @@ export async function addIdeaComment(
     actor: newComment.user,
     target_tab: "discussions",
   });
-
-  if (isSupabaseConfigured() && idea.id) {
-    try {
-      const supabase = createClient();
-      supabase.from("comments").insert({
-        idea_id: idea.id,
-        user_id: newComment.user.username,
-        content: newComment.content,
-        parent_comment_id: parentCommentId || null,
-        likes_count: 0,
-      } as any).then(({ error }) => {
-        if (error) console.warn("Supabase insert comment error:", error.message);
-      });
-    } catch {
-      // ignore
-    }
-  }
 
   return newComment;
 }
@@ -898,103 +1484,166 @@ export async function getAllAuthors(): Promise<IdeaAuthor[]> {
 
 export async function getUserProfile(username: string): Promise<UserProfileData | null> {
   const cleanUsername = decodeURIComponent(username).toLowerCase().replace(/^@/, "").trim();
+  if (!cleanUsername) return null;
 
-  // If Supabase is configured, check for live profile in Supabase
+  const allIdeas = await getAllIdeas();
+  const configured = isSupabaseConfigured();
+
   let dbAuthor: IdeaAuthor | null = null;
-  if (isSupabaseConfigured()) {
+  if (configured) {
     try {
       const supabase = createClient();
-      const { data } = await (supabase as any)
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
-        .eq("username", cleanUsername)
+        .ilike("username", cleanUsername)
         .maybeSingle();
 
-      const profileData = data as any;
       if (profileData) {
-        dbAuthor = {
-          username: profileData.username,
-          full_name: profileData.full_name || profileData.username,
-          avatar_url: profileData.avatar_url || undefined,
-          bio: profileData.bio || undefined,
-          github_url: profileData.github_url || undefined,
-          twitter_url: profileData.twitter_url || undefined,
-          website_url: profileData.website_url || undefined,
-          location: profileData.location || "Global",
-          joined_date: profileData.created_at
-            ? new Date(profileData.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
-            : "Recent Builder",
-          reputation_score: profileData.reputation_score || 300,
-          badges: profileData.badges || ["Ideator"],
-        };
+        dbAuthor = profileRowToAuthor(profileData);
       }
     } catch {
-      // ignore
+      // fall through gracefully
     }
   }
 
-  // Find author in dbAuthor, MOCK_AUTHORS or synthesized
-  let author = dbAuthor || MOCK_AUTHORS.find(
-    (a) => a.username.toLowerCase() === cleanUsername
-  );
+  let author =
+    dbAuthor ||
+    MOCK_AUTHORS.find((a) => a.username.toLowerCase() === cleanUsername);
 
   if (!author) {
-    // Check if any idea was created by this author
-    const ideaByAuthor = memoryIdeas.find(
+    const ideaByAuthor = allIdeas.find(
       (i) => i.author?.username.toLowerCase() === cleanUsername
     );
-    if (ideaByAuthor && ideaByAuthor.author) {
+    if (ideaByAuthor?.author) {
       author = ideaByAuthor.author;
-    } else {
-      // Dynamic profile fallback
-      author = {
-        username: cleanUsername,
-        full_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1).replace(/_/g, " "),
-        bio: `Software architect and open-source contributor on IdeaToX exploring real-world blueprints.`,
-        reputation_score: 420,
-        badges: ["Ideator"],
-        joined_date: "Recent Builder",
-        location: "Global",
-      };
     }
+  }
+
+  if (!author) {
+    return null;
   }
 
   author = applyProfileOverrides(author);
 
-  // Filter ideas authored by this user
-  const authoredIdeas = memoryIdeas.filter(
-    (i) => i.author?.username.toLowerCase() === cleanUsername
+  const authoredIdeas = allIdeas.filter(
+    (i) =>
+      i.author?.username.toLowerCase() === cleanUsername ||
+      (dbAuthor?.id && i.author_id === dbAuthor.id)
   );
 
   const originalSpecs = authoredIdeas.filter((i) => !i.parent_slug);
   const forks = authoredIdeas.filter((i) => Boolean(i.parent_slug));
 
-  // Collect builds across all ideas by this user
+  const ideaSlugById = new Map<string, string>();
+  allIdeas.forEach((item) => {
+    if (item.id) ideaSlugById.set(item.id, item.slug);
+  });
+
   const userBuilds: IdeaBuild[] = [];
+  const seenBuildIds = new Set<string>();
   memoryIdeas.forEach((i) => {
     (i.builds || []).forEach((b) => {
-      if (b.builder?.username.toLowerCase() === cleanUsername) {
+      if (b.builder?.username.toLowerCase() === cleanUsername && !seenBuildIds.has(b.id)) {
+        seenBuildIds.add(b.id);
         userBuilds.push(b);
       }
     });
   });
 
-  // Collect PRs across all ideas submitted by this user
   const userPRs: FeatureRequest[] = [];
+  const seenPrIds = new Set<string>();
   memoryIdeas.forEach((i) => {
     (i.feature_requests || []).forEach((pr) => {
-      if (pr.proposer?.username.toLowerCase() === cleanUsername) {
+      if (pr.proposer?.username.toLowerCase() === cleanUsername && !seenPrIds.has(pr.id)) {
+        seenPrIds.add(pr.id);
         userPRs.push(pr);
       }
     });
   });
+
+  let userStarred: Idea[] = [];
+
+  if (configured && dbAuthor?.id) {
+    try {
+      const supabase = createClient();
+      const [buildsRes, prsRes, upvotesRes] = await Promise.all([
+        supabase
+          .from("idea_builds")
+          .select("*")
+          .eq("builder_id", dbAuthor.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("feature_requests")
+          .select("*")
+          .eq("proposer_id", dbAuthor.id)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("idea_upvotes")
+          .select("idea_id")
+          .eq("user_id", dbAuthor.id),
+      ]);
+
+      if (!buildsRes.error && buildsRes.data) {
+        buildsRes.data.forEach((row) => {
+          if (seenBuildIds.has(row.id)) return;
+          seenBuildIds.add(row.id);
+          userBuilds.push({
+            id: row.id,
+            idea_id: ideaSlugById.get(row.idea_id) || row.idea_id,
+            builder: author!,
+            status: row.status === "shipped" ? "shipped" : "building",
+            repo_url: row.repo_url,
+            live_url: row.live_url || undefined,
+            notes: row.notes || undefined,
+            created_at: row.created_at,
+          });
+        });
+      }
+
+      if (!prsRes.error && prsRes.data) {
+        prsRes.data.forEach((row) => {
+          if (seenPrIds.has(row.id)) return;
+          seenPrIds.add(row.id);
+          userPRs.push({
+            id: row.id,
+            idea_id: ideaSlugById.get(row.idea_id) || row.idea_id,
+            proposer: author!,
+            action_type:
+              row.action_type === "remove_feature" ? "remove_feature" : "add_feature",
+            feature_text: row.feature_text,
+            rationale: row.rationale || undefined,
+            status:
+              row.status === "approved" || row.status === "rejected"
+                ? row.status
+                : "pending",
+            created_at: row.created_at,
+          });
+        });
+      }
+
+      if (!upvotesRes.error && upvotesRes.data) {
+        const upvotedIds = new Set(upvotesRes.data.map((u) => u.idea_id));
+        userStarred = allIdeas.filter((i) => i.id && upvotedIds.has(i.id));
+      }
+    } catch {
+      // keep locally discovered data
+    }
+  } else {
+    const starredSlugs = getUserStars();
+    userStarred = allIdeas.filter((i) => starredSlugs.includes(i.slug.toLowerCase()));
+  }
 
   const totalSpecs = originalSpecs.length;
   const totalForks = forks.length;
   const totalBuilds = userBuilds.length;
   const totalStars = authoredIdeas.reduce((acc, i) => acc + (i.upvotes_count || 0), 0);
 
-  const reputation = (author.reputation_score || 300) + (totalStars * 8) + (totalBuilds * 40) + (totalForks * 20);
+  const reputation =
+    (author.reputation_score || 300) +
+    totalStars * 8 +
+    totalBuilds * 40 +
+    totalForks * 20;
 
   let rankTitle = "Apprentice Builder";
   if (reputation >= 3000) rankTitle = "Principal Systems Architect";
@@ -1002,17 +1651,11 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
   else if (reputation >= 800) rankTitle = "Senior Full-Stack Builder";
   else if (reputation >= 300) rankTitle = "Ecosystem Contributor";
 
-  // Dynamic Badges
   const badgesSet = new Set<string>(author.badges || []);
   if (totalSpecs > 0) badgesSet.add("Ideator");
   if (totalForks > 0) badgesSet.add("Remixer");
   if (totalBuilds > 0) badgesSet.add("Shipper");
   if (userPRs.some((pr) => pr.status === "approved")) badgesSet.add("Architect");
-
-  const starredSlugs = getUserStars();
-  const userStarred = memoryIdeas.filter((i) =>
-    starredSlugs.includes(i.slug.toLowerCase())
-  );
 
   return {
     author: {
@@ -1039,6 +1682,17 @@ export async function getUserProfile(username: string): Promise<UserProfileData 
 // -------------------------------------------------------------
 // MILESTONE 9: BUILDER COLLABORATION & TEAM FORMATION
 // -------------------------------------------------------------
+function isMissingRelationError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message || "").toLowerCase();
+  return (
+    error.code === "42P01" ||
+    error.code === "PGRST205" ||
+    msg.includes("does not exist") ||
+    msg.includes("schema cache")
+  );
+}
+
 export async function addCollaborationRequest(
   slug: string,
   req: {
@@ -1050,8 +1704,73 @@ export async function addCollaborationRequest(
   }
 ): Promise<CollaborationRequest | null> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
   if (!idea) return null;
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to pitch a collaboration request.");
+    }
+
+    let persistedId = `collab-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    let persistedCreatedAt = "Just now";
+
+    if (isUuid(idea.id)) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("collaboration_requests")
+        .insert({
+          idea_id: idea.id,
+          applicant_id: actor.user.id,
+          role: req.role.trim(),
+          contact_handle: req.contact_handle.trim(),
+          availability: req.availability.trim(),
+          pitch: req.pitch.trim(),
+          status: "pending",
+        })
+        .select("id, created_at")
+        .single();
+
+      if (error) {
+        if (!isMissingRelationError(error)) {
+          throw new Error(error.message);
+        }
+      } else if (data) {
+        persistedId = data.id;
+        persistedCreatedAt = data.created_at;
+      }
+    }
+
+    const newCollab: CollaborationRequest = {
+      id: persistedId,
+      idea_id: idea.slug,
+      applicant: actor.author,
+      role: req.role.trim(),
+      contact_handle: req.contact_handle.trim(),
+      availability: req.availability.trim(),
+      pitch: req.pitch.trim(),
+      status: "pending",
+      created_at: persistedCreatedAt,
+    };
+
+    idea.collaboration_requests = [newCollab, ...(idea.collaboration_requests || [])];
+
+    addNotification({
+      type: "collab",
+      title: `Collaboration Pitch on "${idea.title}"`,
+      message: `Applied for ${newCollab.role} (${newCollab.availability}) • ${newCollab.pitch.slice(0, 80)}`,
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      actor: actor.author,
+      target_tab: "team",
+      recipient_id: idea.author_id || idea.author?.id,
+    });
+
+    return newCollab;
+  }
 
   const newCollab: CollaborationRequest = {
     id: `collab-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -1086,11 +1805,45 @@ export async function reviewCollaborationRequest(
   decision: "accepted" | "declined"
 ): Promise<{ success: boolean; idea: Idea | null; message: string }> {
   const normalized = slug.toLowerCase();
-  const idea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+  const idea =
+    memoryIdeas.find((i) => i.slug.toLowerCase() === normalized) ||
+    (await getIdeaBySlug(normalized));
   if (!idea) return { success: false, idea: null, message: "Idea blueprint not found" };
 
   const req = idea.collaboration_requests?.find((r) => r.id === requestId);
   if (!req) return { success: false, idea, message: "Collaboration request not found" };
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      return {
+        success: false,
+        idea,
+        message: "Sign in as the specification author to review collaboration pitches.",
+      };
+    }
+
+    const ownerId = idea.author_id || idea.author?.id;
+    if (ownerId && ownerId !== actor.user.id) {
+      return {
+        success: false,
+        idea,
+        message: "Only the specification author can accept or decline collaboration requests.",
+      };
+    }
+
+    if (isUuid(requestId)) {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("collaboration_requests")
+        .update({ status: decision })
+        .eq("id", requestId);
+
+      if (error && !isMissingRelationError(error)) {
+        return { success: false, idea, message: error.message };
+      }
+    }
+  }
 
   req.status = decision;
 
@@ -1099,6 +1852,19 @@ export async function reviewCollaborationRequest(
     if (!existing.some((m) => m.username === req.applicant.username)) {
       idea.team_members = [...existing, req.applicant];
     }
+  }
+
+  if (req.applicant.id) {
+    addNotification({
+      type: "collab",
+      title: `Collaboration Request ${decision === "accepted" ? "Accepted" : "Declined"}`,
+      message: `Your pitch for ${req.role} on "${idea.title}" was ${decision}.`,
+      idea_slug: idea.slug,
+      idea_title: idea.title,
+      actor: getCurrentActorAuthor(),
+      target_tab: "team",
+      recipient_id: req.applicant.id,
+    });
   }
 
   return {
@@ -1169,51 +1935,71 @@ export function applyProfileOverrides(author: IdeaAuthor): IdeaAuthor {
 }
 
 export function getCurrentActorAuthor(): IdeaAuthor {
+  if (activeSessionProfile) {
+    return applyProfileOverrides(profileRowToAuthor(activeSessionProfile));
+  }
+  if (activeSessionUser) {
+    const handle = sanitizeUsernameHandle(
+      (activeSessionUser.email ? activeSessionUser.email.split("@")[0] : "") ||
+        `builder_${activeSessionUser.id.slice(0, 4)}`
+    );
+    return applyProfileOverrides({
+      id: activeSessionUser.id,
+      username: handle,
+      full_name: handle,
+      reputation_score: 300,
+      badges: ["Ideator"],
+    });
+  }
   const base =
     MOCK_AUTHORS.find((a) => a.username === "you_builder") || MOCK_AUTHORS[MOCK_AUTHORS.length - 1];
   return applyProfileOverrides(base);
 }
 
 export async function getActiveBuilderProfile(username?: string): Promise<IdeaAuthor> {
-  const target = (username || "you_builder").toLowerCase().replace(/^@/, "").trim();
+  const target = (username || "").toLowerCase().replace(/^@/, "").trim();
   let baseAuthor: IdeaAuthor | undefined;
 
   if (isSupabaseConfigured()) {
     try {
-      const dbProfile = await getCurrentProfile();
-      if (dbProfile && (!username || dbProfile.username.toLowerCase() === target)) {
-        baseAuthor = {
-          username: dbProfile.username,
-          full_name: dbProfile.full_name || dbProfile.username,
-          avatar_url: dbProfile.avatar_url || undefined,
-          bio: dbProfile.bio || undefined,
-          github_url: dbProfile.github_url || undefined,
-          twitter_url: dbProfile.twitter_url || undefined,
-          website_url: dbProfile.website_url || undefined,
-          location: dbProfile.location || "Global",
-          reputation_score: dbProfile.reputation_score || 520,
-          badges: dbProfile.badges || ["Ideator", "Remixer", "Shipper"],
-        };
+      if (
+        activeSessionProfile &&
+        (!target || activeSessionProfile.username.toLowerCase() === target)
+      ) {
+        baseAuthor = profileRowToAuthor(activeSessionProfile);
+      } else {
+        const dbProfile = await getCurrentProfile();
+        if (dbProfile && (!target || dbProfile.username.toLowerCase() === target)) {
+          activeSessionProfile = dbProfile;
+          baseAuthor = profileRowToAuthor(dbProfile);
+        }
       }
     } catch {
-      // fallback to local mock persona
+      // fallback cleanly below
     }
   }
 
   if (!baseAuthor) {
+    const fallbackHandle = target || "you_builder";
     baseAuthor =
-      MOCK_AUTHORS.find((a) => a.username.toLowerCase() === target) ||
+      MOCK_AUTHORS.find((a) => a.username.toLowerCase() === fallbackHandle) ||
       MOCK_AUTHORS.find((a) => a.username === "you_builder")!;
   }
 
   return applyProfileOverrides(baseAuthor);
 }
 
+function isMissingColumnError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  const msg = (error.message || "").toLowerCase();
+  return error.code === "42703" || msg.includes("column") || msg.includes("schema cache");
+}
+
 function syncAuthorIntoMemory(targetUsername: string, updatedAuthor: IdeaAuthor): void {
   const match = (candidate?: IdeaAuthor): IdeaAuthor | undefined => {
     if (!candidate) return candidate;
     return candidate.username.toLowerCase() === targetUsername
-      ? { ...candidate, ...updatedAuthor, username: candidate.username }
+      ? { ...candidate, ...updatedAuthor }
       : candidate;
   };
 
@@ -1243,50 +2029,136 @@ function syncAuthorIntoMemory(targetUsername: string, updatedAuthor: IdeaAuthor)
 }
 
 export async function updateUserProfile(
-  updates: Partial<IdeaAuthor> & { username?: string }
+  updates: Partial<IdeaAuthor> & { username?: string; newUsername?: string }
 ): Promise<IdeaAuthor> {
-  const targetUsername = (updates.username || "you_builder").toLowerCase().replace(/^@/, "").trim();
+  const { username: targetHint, newUsername, ...cleanPatch } = updates;
+
+  if (isSupabaseConfigured()) {
+    const actor = await resolveAuthenticatedActor();
+    if (!actor) {
+      throw new Error("Sign in to update your developer profile.");
+    }
+
+    const supabase = createClient();
+    const currentUsername = actor.author.username.toLowerCase();
+    let finalUsername = currentUsername;
+
+    if (typeof newUsername === "string" && newUsername.trim().length > 0) {
+      const cleanNew = sanitizeUsernameHandle(newUsername);
+      if (cleanNew.length < 3) {
+        throw new Error("Username handle must be at least 3 valid characters.");
+      }
+      if (cleanNew !== currentUsername) {
+        const { data: conflict } = await supabase
+          .from("profiles")
+          .select("id")
+          .ilike("username", cleanNew)
+          .neq("id", actor.user.id)
+          .maybeSingle();
+
+        if (conflict) {
+          throw new Error(`@${cleanNew} is already claimed by another builder.`);
+        }
+        finalUsername = cleanNew;
+      }
+    }
+
+    const merged: IdeaAuthor = {
+      ...actor.author,
+      ...cleanPatch,
+      id: actor.user.id,
+      username: finalUsername,
+    };
+
+    const v1Payload = {
+      username: finalUsername,
+      full_name: merged.full_name || null,
+      bio: merged.bio || null,
+      location: merged.location || null,
+      avatar_url: merged.avatar_url || null,
+      github_url: merged.github_url || null,
+      twitter_url: merged.twitter_url || null,
+      website_url: merged.website_url || null,
+    };
+
+    const v2Payload = {
+      ...v1Payload,
+      headline: merged.headline || null,
+      availability: merged.availability || null,
+      preferred_stack: merged.preferred_stack || null,
+      discord_url: merged.discord_url || null,
+      contact_email: merged.email || null,
+    };
+
+    let { data: updatedRow, error } = await supabase
+      .from("profiles")
+      .update(v2Payload)
+      .eq("id", actor.user.id)
+      .select("*")
+      .single();
+
+    if (error && isMissingColumnError(error)) {
+      const retry = await supabase
+        .from("profiles")
+        .update(v1Payload)
+        .eq("id", actor.user.id)
+        .select("*")
+        .single();
+      updatedRow = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      throw new Error(error.message || "Failed to update developer profile.");
+    }
+
+    if (updatedRow) {
+      activeSessionProfile = updatedRow;
+    }
+
+    const overrides = readProfileOverrides();
+    overrides[finalUsername] = {
+      ...(overrides[finalUsername] || {}),
+      ...cleanPatch,
+    };
+    writeProfileOverrides(overrides);
+
+    const resolvedAuthor = updatedRow
+      ? {
+          ...profileRowToAuthor(updatedRow),
+          ...cleanPatch,
+          username: updatedRow.username,
+        }
+      : merged;
+
+    syncAuthorIntoMemory(currentUsername, resolvedAuthor);
+    if (finalUsername !== currentUsername) {
+      syncAuthorIntoMemory(finalUsername, resolvedAuthor);
+    }
+
+    return resolvedAuthor;
+  }
+
+  const targetUsername = (targetHint || "you_builder").toLowerCase().replace(/^@/, "").trim();
   const current = await getActiveBuilderProfile(targetUsername);
-  const { username: _ignored, ...cleanPatch } = updates;
+  const nextHandle =
+    typeof newUsername === "string" && newUsername.trim().length > 0
+      ? sanitizeUsernameHandle(newUsername)
+      : current.username;
 
   const merged: IdeaAuthor = {
     ...current,
     ...cleanPatch,
-    username: current.username,
+    username: nextHandle,
   };
 
   const overrides = readProfileOverrides();
-  overrides[targetUsername] = {
-    ...(overrides[targetUsername] || {}),
+  overrides[nextHandle] = {
+    ...(overrides[nextHandle] || {}),
     ...cleanPatch,
   };
   writeProfileOverrides(overrides);
   syncAuthorIntoMemory(targetUsername, merged);
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
-      if (data?.user?.id) {
-        const { error } = await (supabase as any)
-          .from("profiles")
-          .update({
-            full_name: merged.full_name || null,
-            bio: merged.bio || null,
-            location: merged.location || null,
-            avatar_url: merged.avatar_url || null,
-            github_url: merged.github_url || null,
-            twitter_url: merged.twitter_url || null,
-            website_url: merged.website_url || null,
-          })
-          .eq("id", data.user.id);
-        if (error) console.warn("Supabase profile sync warning:", error.message);
-      }
-    } catch {
-      // local persistence already succeeded
-    }
-  }
-
   return merged;
 }
 
@@ -1392,6 +2264,9 @@ function persistNotifications(list: IdeaNotification[]): void {
 
 export function getNotifications(): IdeaNotification[] {
   if (typeof window !== "undefined") {
+    if (isSupabaseConfigured() && !activeSessionUser) {
+      return [];
+    }
     try {
       const raw = localStorage.getItem(STORAGE_KEY_NOTIFICATIONS);
       if (raw) {
@@ -1400,8 +2275,12 @@ export function getNotifications(): IdeaNotification[] {
         return parsed;
       }
     } catch {
-      // fall through to seed
+      // fall through
     }
+  }
+
+  if (isSupabaseConfigured()) {
+    return memoryNotifications || [];
   }
 
   if (!memoryNotifications) {
@@ -1421,8 +2300,8 @@ export function addNotification(input: {
   actor?: IdeaAuthor;
   target_tab?: IdeaDetailTab;
   read?: boolean;
+  recipient_id?: string;
 }): IdeaNotification {
-  const existing = getNotifications();
   const next: IdeaNotification = {
     id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     type: input.type,
@@ -1436,23 +2315,84 @@ export function addNotification(input: {
     target_tab: input.target_tab,
   };
 
-  persistNotifications([next, ...existing].slice(0, 40));
+  const shouldStoreLocally =
+    !isSupabaseConfigured() ||
+    !input.recipient_id ||
+    (activeSessionUser !== null && input.recipient_id === activeSessionUser.id);
+
+  if (shouldStoreLocally) {
+    const existing = getNotifications();
+    persistNotifications([next, ...existing].slice(0, 40));
+  }
+
+  if (
+    isSupabaseConfigured() &&
+    activeSessionUser &&
+    isUuid(input.recipient_id) &&
+    input.recipient_id !== activeSessionUser.id
+  ) {
+    const supabase = createClient();
+    void supabase
+      .from("notifications")
+      .insert({
+        recipient_id: input.recipient_id,
+        actor_id: activeSessionUser.id,
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        idea_slug: input.idea_slug,
+        idea_title: input.idea_title,
+        target_tab: input.target_tab ?? null,
+        read: input.read ?? false,
+      })
+      .then(({ error }) => {
+        if (error && !isMissingRelationError(error)) {
+          console.warn("Supabase notification insert warning:", error.message);
+        }
+      });
+  }
+
   return next;
 }
 
 export function markNotificationRead(id: string): IdeaNotification[] {
   const updated = getNotifications().map((n) => (n.id === id ? { ...n, read: true } : n));
   persistNotifications(updated);
+
+  if (isSupabaseConfigured() && activeSessionUser && isUuid(id)) {
+    const supabase = createClient();
+    void supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", id)
+      .eq("recipient_id", activeSessionUser.id)
+      .then(() => undefined);
+  }
+
   return updated;
 }
 
 export function markAllNotificationsRead(): IdeaNotification[] {
   const updated = getNotifications().map((n) => ({ ...n, read: true }));
   persistNotifications(updated);
+
+  if (isSupabaseConfigured() && activeSessionUser) {
+    const supabase = createClient();
+    void supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("recipient_id", activeSessionUser.id)
+      .then(() => undefined);
+  }
+
   return updated;
 }
 
 export function resetNotifications(): IdeaNotification[] {
+  if (isSupabaseConfigured()) {
+    persistNotifications([]);
+    return [];
+  }
   const seeded = buildInitialNotifications();
   persistNotifications(seeded);
   return seeded;
@@ -1608,6 +2548,46 @@ export function toggleIdeaBookmark(slug: string): { bookmarked: boolean; slugs: 
     }
   }
 
+  if (isSupabaseConfigured() && activeSessionUser) {
+    const userId = activeSessionUser.id;
+    const supabase = createClient();
+    const cachedIdea = memoryIdeas.find((i) => i.slug.toLowerCase() === normalized);
+
+    void (async () => {
+      try {
+        let ideaId = cachedIdea && isUuid(cachedIdea.id) ? cachedIdea.id : null;
+        if (!ideaId) {
+          const { data } = await supabase
+            .from("ideas")
+            .select("id")
+            .ilike("slug", normalized)
+            .maybeSingle();
+          if (data?.id && isUuid(data.id)) ideaId = data.id;
+        }
+        if (!ideaId) return;
+
+        if (!exists) {
+          const { error } = await supabase
+            .from("bookmarks")
+            .upsert({ user_id: userId, idea_id: ideaId }, { onConflict: "user_id,idea_id" });
+          if (error && !isMissingRelationError(error)) {
+            console.warn("Supabase bookmark insert warning:", error.message);
+          }
+        } else {
+          const { error } = await supabase
+            .from("bookmarks")
+            .delete()
+            .match({ user_id: userId, idea_id: ideaId });
+          if (error && !isMissingRelationError(error)) {
+            console.warn("Supabase bookmark delete warning:", error.message);
+          }
+        }
+      } catch {
+        // local bookmark state preserved cleanly
+      }
+    })();
+  }
+
   return { bookmarked: !exists, slugs: next };
 }
 
@@ -1631,5 +2611,156 @@ export function subscribeBookmarks(callback: () => void): () => void {
   };
 }
 
+// -------------------------------------------------------------
+// MILESTONE 13: SESSION HYDRATION & CACHE RESET
+// -------------------------------------------------------------
+export async function hydrateUserSupabaseData(userId: string): Promise<void> {
+  if (!isSupabaseConfigured() || !userId || typeof window === "undefined") return;
 
+  const supabase = createClient();
 
+  try {
+    const [upvotesRes, bookmarksRes, notificationsRes] = await Promise.allSettled([
+      supabase.from("idea_upvotes").select("idea_id").eq("user_id", userId),
+      supabase.from("bookmarks").select("idea_id").eq("user_id", userId),
+      supabase
+        .from("notifications")
+        .select("*")
+        .eq("recipient_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(40),
+    ]);
+
+    const upvoteRows =
+      upvotesRes.status === "fulfilled" && !upvotesRes.value.error
+        ? upvotesRes.value.data || []
+        : null;
+    const bookmarkRows =
+      bookmarksRes.status === "fulfilled" && !bookmarksRes.value.error
+        ? bookmarksRes.value.data || []
+        : null;
+    const notificationRows =
+      notificationsRes.status === "fulfilled" && !notificationsRes.value.error
+        ? notificationsRes.value.data || []
+        : null;
+
+    const slugById = new Map<string, string>();
+    memoryIdeas.forEach((item) => {
+      if (item.id && item.slug) slugById.set(item.id, item.slug.toLowerCase());
+    });
+
+    const missingIds = new Set<string>();
+    (upvoteRows || []).forEach((r) => {
+      if (!slugById.has(r.idea_id)) missingIds.add(r.idea_id);
+    });
+    (bookmarkRows || []).forEach((r) => {
+      if (!slugById.has(r.idea_id)) missingIds.add(r.idea_id);
+    });
+
+    if (missingIds.size > 0) {
+      const { data: ideaMeta } = await supabase
+        .from("ideas")
+        .select("id, slug")
+        .in("id", Array.from(missingIds));
+      (ideaMeta || []).forEach((row) => {
+        slugById.set(row.id, row.slug.toLowerCase());
+      });
+    }
+
+    if (upvoteRows !== null) {
+      memoryUserUpvotes.clear();
+      upvoteRows.forEach((r) => {
+        const slug = slugById.get(r.idea_id);
+        if (slug) memoryUserUpvotes.add(slug);
+      });
+      try {
+        localStorage.setItem(
+          STORAGE_KEY_UPVOTES,
+          JSON.stringify(Array.from(memoryUserUpvotes))
+        );
+      } catch {
+        // ignore quota errors
+      }
+      emitBrowserEvent(EVENT_UPVOTES_UPDATED);
+    }
+
+    if (bookmarkRows !== null) {
+      const nextBookmarks = bookmarkRows
+        .map((r) => slugById.get(r.idea_id))
+        .filter((s): s is string => Boolean(s));
+      const nextRaw = JSON.stringify(nextBookmarks);
+      cachedBookmarksRaw = nextRaw;
+      cachedBookmarksList = nextBookmarks;
+      try {
+        localStorage.setItem(BOOKMARKS_STORAGE_KEY, nextRaw);
+      } catch {
+        // ignore quota errors
+      }
+      emitBrowserEvent(EVENT_BOOKMARKS_UPDATED);
+    }
+
+    if (notificationRows !== null) {
+      const actorIds = Array.from(
+        new Set(
+          notificationRows
+            .map((n) => n.actor_id)
+            .filter((id): id is string => Boolean(id && isUuid(id)))
+        )
+      );
+      const actorMap = new Map<string, IdeaAuthor>();
+      if (actorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", actorIds);
+        (profiles || []).forEach((p) => {
+          actorMap.set(p.id, profileRowToAuthor(p));
+        });
+      }
+
+      const mapped: IdeaNotification[] = notificationRows.map((row) => ({
+        id: row.id,
+        type: row.type,
+        title: row.title,
+        message: row.message,
+        idea_slug: row.idea_slug,
+        idea_title: row.idea_title,
+        actor: (row.actor_id ? actorMap.get(row.actor_id) : undefined) || MOCK_AUTHORS[0],
+        created_at: new Date(row.created_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        read: Boolean(row.read),
+        target_tab: (row.target_tab as IdeaDetailTab | null) || undefined,
+      }));
+      persistNotifications(mapped);
+    } else {
+      persistNotifications([]);
+    }
+  } catch {
+    // non-fatal hydration failure
+  }
+}
+
+export function resetActiveUserSessionCache(): void {
+  activeSessionUser = null;
+  activeSessionProfile = null;
+  memoryUserUpvotes.clear();
+  cachedBookmarksRaw = null;
+  cachedBookmarksList = EMPTY_BOOKMARKS;
+  memoryNotifications = null;
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_KEY_UPVOTES);
+      localStorage.removeItem(BOOKMARKS_STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY_NOTIFICATIONS);
+    } catch {
+      // ignore storage errors
+    }
+    emitBrowserEvent(EVENT_PROFILE_UPDATED);
+    emitBrowserEvent(EVENT_UPVOTES_UPDATED);
+    emitBrowserEvent(EVENT_BOOKMARKS_UPDATED);
+    emitBrowserEvent(EVENT_NOTIFICATIONS_UPDATED);
+  }
+}

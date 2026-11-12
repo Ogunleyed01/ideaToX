@@ -75,6 +75,12 @@ const TYPE_META: Record<
     badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
     iconBgClass: "bg-amber-400/15 text-amber-700 border-amber-300/60",
   },
+  system: {
+    label: "System Notice",
+    icon: Bell,
+    badgeClass: "bg-zinc-100 text-zinc-700 border-zinc-200",
+    iconBgClass: "bg-zinc-200/70 text-zinc-700 border-zinc-300/70",
+  },
 };
 
 export function NotificationDrawer({

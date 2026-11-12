@@ -2,42 +2,31 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useAuth } from "@/components/auth-provider";
 
 export default function ProfileIndexPage() {
   const router = useRouter();
+  const { user, profile, isConfigured, loading } = useAuth();
 
   useEffect(() => {
-    async function checkUser() {
-      if (isSupabaseConfigured()) {
-        try {
-          const supabase = createClient();
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
+    if (loading) return;
 
-          if (user) {
-            const { data } = await supabase
-              .from("profiles")
-              .select("username")
-              .eq("id", user.id)
-              .maybeSingle();
-
-            const profile = data as any;
-            if (profile?.username) {
-              router.replace(`/profile/${profile.username}`);
-              return;
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
+    if (!isConfigured) {
       router.replace("/profile/you_builder");
+      return;
     }
 
-    checkUser();
-  }, [router]);
+    if (!user) {
+      router.replace("/auth?next=/profile&reason=auth_required");
+      return;
+    }
+
+    if (profile?.username) {
+      router.replace(`/profile/${encodeURIComponent(profile.username)}`);
+    } else {
+      router.replace("/settings");
+    }
+  }, [loading, isConfigured, user, profile?.username, router]);
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-zinc-500 font-mono text-xs">

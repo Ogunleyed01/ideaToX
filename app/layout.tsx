@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Inter, JetBrains_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
+import { AuthProvider } from "@/components/auth-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -50,7 +51,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="bg-[#FAF9F6] text-[#111113] font-body-md text-body-md antialiased selection:bg-amber-100 selection:text-amber-900"
       >
-        {children}
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

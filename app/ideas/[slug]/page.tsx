@@ -46,6 +46,7 @@ import {
   getIdeaLineage,
   toggleUpvote,
   hasUserUpvoted,
+  subscribeUpvotes,
   isIdeaBookmarked,
   toggleIdeaBookmark,
   subscribeBookmarks,
@@ -54,7 +55,6 @@ import {
   addIdeaBuild,
   addIdeaComment,
   toggleCommentLike,
-  addCollaborationRequest,
   reviewCollaborationRequest,
   IdeaLineage,
 } from "@/lib/ideas";
@@ -65,7 +65,8 @@ import { CollaborateModal } from "@/components/collaborate-modal";
 import { SpecExportModal } from "@/components/spec-export-modal";
 import { ArchitectureTopology } from "@/components/architecture-topology";
 import { InfrastructureEstimator } from "@/components/infrastructure-estimator";
-import { getCurrentProfile } from "@/lib/supabase/client";
+import { useAuth } from "@/components/auth-provider";
+import { sanitizeUsernameHandle } from "@/lib/supabase/client";
 
 const DIFFICULTY_CONFIG: Record<
   IdeaDifficulty,
@@ -99,6 +100,7 @@ function IdeaDetailContent() {
   const searchParams = useSearchParams();
   const rawSlug = params?.slug as string;
   const slug = rawSlug ? decodeURIComponent(rawSlug) : "";
+  const { user, profile, isConfigured, requireAuth } = useAuth();
 
   const [idea, setIdea] = useState<Idea | null>(null);
   const [lineage, setLineage] = useState<IdeaLineage | null>(null);
@@ -140,7 +142,7 @@ function IdeaDetailContent() {
   const [collabModalOpen, setCollabModalOpen] = useState(false);
   const [exportModalOpen, setExportModalOpen] = useState(false);
 
-  // Maintainer view mode
+  // Offline demo maintainer toggle (ignored when live Supabase auth is active)
   const [isOwnerView, setIsOwnerView] = useState(true);
 
   // Feature PR submission form
@@ -168,10 +170,11 @@ function IdeaDetailContent() {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   useEffect(() => {
+    let active = true;
     async function loadData() {
       if (!slug) return;
-      setLoading(true);
       const fetchedIdea = await getIdeaBySlug(slug);
+      if (!active) return;
       if (fetchedIdea) {
         setIdea(fetchedIdea);
         setStarCount(fetchedIdea.upvotes_count || 0);
@@ -183,22 +186,34 @@ function IdeaDetailContent() {
         setCollabRequests(fetchedIdea.collaboration_requests || []);
         setTeamMembers(fetchedIdea.team_members || []);
 
-        const tree = await getIdeaLineage(fetchedIdea.slug);
+        const [tree, related] = await Promise.all([
+          getIdeaLineage(fetchedIdea.slug),
+          getRelatedIdeas(fetchedIdea.category, fetchedIdea.slug),
+        ]);
+        if (!active) return;
         setLineage(tree);
-
-        const related = await getRelatedIdeas(fetchedIdea.category, fetchedIdea.slug);
         setRelatedIdeas(related);
       }
       setLoading(false);
     }
-    loadData();
+    void loadData();
+    return () => {
+      active = false;
+    };
   }, [slug]);
 
   useEffect(() => {
     if (!slug) return;
-    return subscribeBookmarks(() => {
+    const unsubBookmarks = subscribeBookmarks(() => {
       setBookmarked(isIdeaBookmarked(slug));
     });
+    const unsubUpvotes = subscribeUpvotes(() => {
+      setStarred(hasUserUpvoted(slug));
+    });
+    return () => {
+      unsubBookmarks();
+      unsubUpvotes();
+    };
   }, [slug]);
 
   if (loading) {
@@ -245,7 +260,36 @@ function IdeaDetailContent() {
     }));
   };
 
+  const isIdeaOwner = Boolean(
+    isConfigured
+      ? user &&
+          ((idea.author_id && idea.author_id === user.id) ||
+            (idea.author?.id && idea.author.id === user.id) ||
+            (profile?.username &&
+              idea.author?.username &&
+              profile.username.toLowerCase() === idea.author.username.toLowerCase()))
+      : isOwnerView
+  );
+
+  const getActorSnapshot = (): IdeaAuthor | undefined => {
+    if (!user) return undefined;
+    const handle =
+      profile?.username ||
+      (user.email
+        ? sanitizeUsernameHandle(user.email.split("@")[0])
+        : `builder_${user.id.slice(0, 4)}`);
+    return {
+      id: user.id,
+      username: handle,
+      full_name: profile?.full_name || handle,
+      avatar_url: profile?.avatar_url || undefined,
+      reputation_score: profile?.reputation_score || 300,
+      badges: profile?.badges || ["Ideator"],
+    };
+  };
+
   const handleStar = async () => {
+    if (!requireAuth("Sign in to star blueprints on IdeaToX.")) return;
     const prevStarred = starred;
     const prevCount = starCount;
     setStarred(!prevStarred);
@@ -255,13 +299,18 @@ function IdeaDetailContent() {
       const res = await toggleUpvote(idea.slug);
       setStarred(res.starred);
       setStarCount(res.upvotes_count);
-    } catch {
+    } catch (err) {
       setStarred(prevStarred);
       setStarCount(prevCount);
+      setBannerNotice(err instanceof Error ? err.message : "Could not update star.");
+      setTimeout(() => setBannerNotice(null), 4000);
     }
   };
 
   const handleBookmark = () => {
+    if (!requireAuth("Sign in to bookmark blueprints to your Want to Build reading list.")) {
+      return;
+    }
     const res = toggleIdeaBookmark(idea.slug);
     setBookmarked(res.bookmarked);
     setBannerNotice(
@@ -308,92 +357,71 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
   const submitFeaturePR = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prFeatureText.trim()) return;
+    if (!requireAuth("Sign in to propose a Feature Pull Request.")) return;
 
-    let proposer = undefined;
     try {
-      const profile = await getCurrentProfile();
-      if (profile) {
-        const p = profile as any;
-        proposer = {
-          username: p.username,
-          full_name: p.full_name || p.username,
-          avatar_url: p.avatar_url || undefined,
-          reputation_score: p.reputation_score || 300,
-          badges: p.badges || ["Ideator"],
-        };
+      const newPR = await addFeatureRequest(idea.slug, {
+        action_type: prActionType,
+        feature_text: prFeatureText.trim(),
+        rationale: prRationale.trim(),
+        proposer: getActorSnapshot(),
+      });
+
+      if (newPR) {
+        setFeatureRequests([newPR, ...featureRequests]);
+        setPrFeatureText("");
+        setPrRationale("");
+        setPrModalOpen(false);
+        setBannerNotice(
+          `Feature Pull Request submitted: "${newPR.feature_text}". Awaiting maintainer review.`
+        );
+        setTimeout(() => setBannerNotice(null), 5000);
       }
-    } catch {
-      // fallback
-    }
-
-    const newPR = await addFeatureRequest(idea.slug, {
-      action_type: prActionType,
-      feature_text: prFeatureText.trim(),
-      rationale: prRationale.trim(),
-      proposer,
-    });
-
-    if (newPR) {
-      setFeatureRequests([newPR, ...featureRequests]);
-      setPrFeatureText("");
-      setPrRationale("");
-      setPrModalOpen(false);
-      setBannerNotice(
-        `Feature Pull Request submitted: "${newPR.feature_text}". Awaiting maintainer review.`
-      );
+    } catch (err) {
+      setBannerNotice(err instanceof Error ? err.message : "Failed to submit Feature PR.");
       setTimeout(() => setBannerNotice(null), 5000);
     }
   };
 
   const handleReviewPR = async (prId: string, decision: "approved" | "rejected") => {
+    if (!requireAuth("Sign in as the specification author to review Feature PRs.")) return;
     const res = await reviewFeatureRequest(idea.slug, prId, decision);
     if (res.success && res.idea) {
       setIdea(res.idea);
       setFeatureRequests(res.idea.feature_requests || []);
-      setBannerNotice(res.message);
-      setTimeout(() => setBannerNotice(null), 6000);
     }
+    setBannerNotice(res.message);
+    setTimeout(() => setBannerNotice(null), 6000);
   };
 
   const submitBuild = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!repoUrl.trim()) return;
+    if (!requireAuth("Sign in to link a proof-of-work repository or build.")) return;
 
-    let builder = undefined;
     try {
-      const profile = await getCurrentProfile();
-      if (profile) {
-        const p = profile as any;
-        builder = {
-          username: p.username,
-          full_name: p.full_name || p.username,
-          avatar_url: p.avatar_url || undefined,
-          reputation_score: p.reputation_score || 300,
-          badges: p.badges || ["Shipper"],
-        };
+      const res = await addIdeaBuild(idea.slug, {
+        repo_url: repoUrl.trim(),
+        live_url: liveUrl.trim() || undefined,
+        status: buildStatus,
+        notes: buildNotes.trim() || "Active implementation linked via IdeaToX Showcase.",
+        builder: getActorSnapshot(),
+      });
+
+      if (res.success && res.build) {
+        setBuilds([res.build, ...builds]);
+        setIdea((prev) => (prev ? { ...prev, builds_count: res.builds_count } : prev));
+        setRepoUrl("");
+        setLiveUrl("");
+        setBuildNotes("");
+        setBuildModalOpen(false);
+        setBannerNotice(
+          `Proof-of-work build linked successfully for ${res.build.repo_url.replace("https://github.com/", "")}!`
+        );
+        setTimeout(() => setBannerNotice(null), 5000);
       }
-    } catch {
-      // fallback
-    }
-
-    const res = await addIdeaBuild(idea.slug, {
-      repo_url: repoUrl.trim(),
-      live_url: liveUrl.trim() || undefined,
-      status: buildStatus,
-      notes: buildNotes.trim() || "Active implementation linked via IdeaToX Showcase.",
-      builder,
-    });
-
-    if (res.success && res.build) {
-      setBuilds([res.build, ...builds]);
-      setIdea((prev) => (prev ? { ...prev, builds_count: res.builds_count } : prev));
-      setRepoUrl("");
-      setLiveUrl("");
-      setBuildNotes("");
-      setBuildModalOpen(false);
-      setBannerNotice(
-        `Proof-of-work build linked successfully for ${res.build.repo_url.replace("https://github.com/", "")}!`
-      );
+    } catch (err) {
+      setBannerNotice(err instanceof Error ? err.message : "Failed to link build.");
       setTimeout(() => setBannerNotice(null), 5000);
     }
   };
@@ -401,27 +429,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
   const handlePostComment = async (parentId?: string | null) => {
     const text = parentId ? replyText : newCommentText;
     if (!text.trim() || !idea) return;
+    if (!requireAuth("Sign in to participate in architectural discussions.")) return;
 
     setIsSubmittingComment(true);
     try {
-      let authorUser = undefined;
-      try {
-        const profile = await getCurrentProfile();
-        if (profile) {
-          const p = profile as any;
-          authorUser = {
-            username: p.username,
-            full_name: p.full_name || p.username,
-            avatar_url: p.avatar_url || undefined,
-            reputation_score: p.reputation_score || 300,
-            badges: p.badges || ["Ideator"],
-          };
-        }
-      } catch {
-        // fallback
-      }
-
-      const created = await addIdeaComment(idea.slug, text, parentId, authorUser);
+      const created = await addIdeaComment(idea.slug, text, parentId, getActorSnapshot());
       if (created) {
         setComments((prev) => [...prev, created]);
         if (parentId) {
@@ -437,6 +449,9 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
         );
         setTimeout(() => setBannerNotice(null), 4000);
       }
+    } catch (err) {
+      setBannerNotice(err instanceof Error ? err.message : "Failed to post comment.");
+      setTimeout(() => setBannerNotice(null), 4000);
     } finally {
       setIsSubmittingComment(false);
     }
@@ -444,6 +459,7 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
 
   const handleToggleCommentLike = async (commentId: string) => {
     if (!idea) return;
+    if (!requireAuth("Sign in to upvote technical comments.")) return;
     try {
       const res = await toggleCommentLike(idea.slug, commentId);
       setComments((prev) =>
@@ -460,14 +476,17 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
 
   const handleReviewCollab = async (requestId: string, decision: "accepted" | "declined") => {
     if (!idea) return;
+    if (!requireAuth("Sign in as the specification author to review collaboration requests.")) {
+      return;
+    }
     const res = await reviewCollaborationRequest(idea.slug, requestId, decision);
     if (res.success && res.idea) {
       setIdea(res.idea);
       setCollabRequests(res.idea.collaboration_requests || []);
       setTeamMembers(res.idea.team_members || []);
-      setBannerNotice(res.message);
-      setTimeout(() => setBannerNotice(null), 5000);
     }
+    setBannerNotice(res.message);
+    setTimeout(() => setBannerNotice(null), 5000);
   };
 
   return (
@@ -527,7 +546,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
             {/* Collaborate Trigger */}
             <button
               type="button"
-              onClick={() => setCollabModalOpen(true)}
+              onClick={() => {
+                if (requireAuth("Sign in to pitch a collaboration request.")) {
+                  setCollabModalOpen(true);
+                }
+              }}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 transition-all shadow-sm cursor-pointer"
             >
               <Users className="w-3.5 h-3.5 text-amber-700" />
@@ -549,7 +572,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
             {/* Fork Modal Trigger */}
             <button
               type="button"
-              onClick={() => setForkModalOpen(true)}
+              onClick={() => {
+                if (requireAuth("Sign in to branch architectural blueprints.")) {
+                  setForkModalOpen(true);
+                }
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-mono font-semibold text-white bg-[#111113] hover:bg-zinc-800 transition-all shadow-sm cursor-pointer"
             >
               <GitFork className="w-3.5 h-3.5 text-amber-300" />
@@ -1143,23 +1170,33 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                     </div>
 
                     <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => setIsOwnerView((prev) => !prev)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-colors border ${
-                          isOwnerView
-                            ? "bg-amber-100 text-amber-900 border-amber-300 font-semibold"
-                            : "bg-white text-zinc-600 border-zinc-200 hover:text-black"
-                        }`}
-                        title="Toggle maintainer review controls"
-                      >
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                        <span>{isOwnerView ? "Maintainer View" : "Contributor View"}</span>
-                      </button>
+                      {!isConfigured ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsOwnerView((prev) => !prev)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono transition-colors border ${
+                            isOwnerView
+                              ? "bg-amber-100 text-amber-900 border-amber-300 font-semibold"
+                              : "bg-white text-zinc-600 border-zinc-200 hover:text-black"
+                          }`}
+                          title="Toggle maintainer review controls"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span>{isOwnerView ? "Maintainer View" : "Contributor View"}</span>
+                        </button>
+                      ) : isIdeaOwner ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono bg-amber-100 text-amber-900 border border-amber-300 font-semibold">
+                          Author Maintainer
+                        </span>
+                      ) : null}
 
                       <button
                         type="button"
-                        onClick={() => setPrModalOpen(true)}
+                        onClick={() => {
+                          if (requireAuth("Sign in to propose MVP Feature PRs.")) {
+                            setPrModalOpen(true);
+                          }
+                        }}
                         className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-mono font-semibold text-white bg-[#111113] hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5 text-amber-300" />
@@ -1227,7 +1264,7 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                                 Proposed by <span className="text-[#111113] font-semibold">@{pr.proposer.username}</span> • {pr.created_at}
                               </span>
 
-                              {isPending && isOwnerView && (
+                              {isPending && isIdeaOwner && (
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
@@ -1269,7 +1306,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                     </div>
                     <button
                       type="button"
-                      onClick={() => setBuildModalOpen(true)}
+                      onClick={() => {
+                        if (requireAuth("Sign in to showcase a build or repository.")) {
+                          setBuildModalOpen(true);
+                        }
+                      }}
                       className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-mono font-semibold text-white bg-[#111113] hover:bg-zinc-800 transition-colors shadow-sm cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5 text-amber-300" />
@@ -1346,7 +1387,14 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
 
               {/* TAB 4: LINEAGE GRAPH */}
               {activeTab === "lineage" && lineage && (
-                <LineageTree lineage={lineage} onForkClick={() => setForkModalOpen(true)} />
+                <LineageTree
+                  lineage={lineage}
+                  onForkClick={() => {
+                    if (requireAuth("Sign in to branch architectural blueprints.")) {
+                      setForkModalOpen(true);
+                    }
+                  }}
+                />
               )}
 
               {/* TAB 5: TEAM & COLLABORATION */}
@@ -1375,7 +1423,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
 
                     <button
                       type="button"
-                      onClick={() => setCollabModalOpen(true)}
+                      onClick={() => {
+                        if (requireAuth("Sign in to pitch a collaboration request.")) {
+                          setCollabModalOpen(true);
+                        }
+                      }}
                       className="inline-flex items-center gap-1.5 h-10 px-5 rounded-xl bg-[#111113] hover:bg-zinc-800 text-white text-xs font-semibold shadow-sm transition-colors shrink-0"
                     >
                       <UserPlus size={14} />
@@ -1459,7 +1511,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                         <p className="text-xs text-zinc-500 font-mono">No pending collaboration pitches yet.</p>
                         <button
                           type="button"
-                          onClick={() => setCollabModalOpen(true)}
+                          onClick={() => {
+                            if (requireAuth("Sign in to pitch a collaboration request.")) {
+                              setCollabModalOpen(true);
+                            }
+                          }}
                           className="mt-3 text-xs font-mono font-semibold text-amber-700 hover:text-amber-800 underline"
                         >
                           Be the first to pitch your role →
@@ -1505,7 +1561,7 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                             </div>
 
                             <p className="text-xs text-zinc-700 leading-relaxed mb-3">
-                              "{req.pitch}"
+                              &ldquo;{req.pitch}&rdquo;
                             </p>
 
                             <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-100">
@@ -1513,7 +1569,7 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                                 Contact: <span className="text-zinc-800 font-semibold">{req.contact_handle}</span>
                               </div>
 
-                              {req.status === "pending" && (
+                              {req.status === "pending" && isIdeaOwner && (
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
@@ -1606,7 +1662,11 @@ Specification archived on IdeaToX // https://ideatox.space/ideas/${idea.slug}`;
                   )}
                   <button
                     type="button"
-                    onClick={() => setForkModalOpen(true)}
+                    onClick={() => {
+                      if (requireAuth("Sign in to branch architectural blueprints.")) {
+                        setForkModalOpen(true);
+                      }
+                    }}
                     className="ml-auto text-amber-800 hover:text-black text-xs font-mono font-bold flex items-center gap-1 cursor-pointer"
                   >
                     <GitFork className="w-3 h-3" />

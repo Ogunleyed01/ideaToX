@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GitFork, ArrowRight, X, AlertCircle } from "lucide-react";
 import { Idea } from "@/types/idea";
 import { createQuickFork } from "@/lib/ideas";
+import { useAuth } from "@/components/auth-provider";
 
 interface ForkModalProps {
   idea: Idea;
@@ -15,6 +16,7 @@ interface ForkModalProps {
 
 export function ForkModal({ idea, isOpen, onClose, onForkCreated }: ForkModalProps) {
   const router = useRouter();
+  const { requireAuth } = useAuth();
   const [remixedTitle, setRemixedTitle] = useState(`Remix: ${idea.title}`);
   const [pivotNotes, setPivotNotes] = useState("");
   const [targetRegion, setTargetRegion] = useState(idea.target_region || "Global");
@@ -25,6 +27,9 @@ export function ForkModal({ idea, isOpen, onClose, onForkCreated }: ForkModalPro
 
   const handleQuickFork = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireAuth("Sign in to branch architectural blueprints.")) {
+      return;
+    }
     if (!remixedTitle.trim()) {
       setError("Please provide a title for your remixed specification.");
       return;
@@ -47,14 +52,23 @@ export function ForkModal({ idea, isOpen, onClose, onForkCreated }: ForkModalPro
       } else {
         setError("Failed to branch blueprint. Please try again.");
       }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred while branching.");
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "An unexpected error occurred while branching."
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleFullStudioCustomization = () => {
+    if (
+      !requireAuth("Sign in to customize this branch in the Studio.", {
+        next: `/ideas/new?fork=${idea.slug}`,
+      })
+    ) {
+      return;
+    }
     onClose();
     router.push(`/ideas/new?fork=${idea.slug}`);
   };
@@ -102,7 +116,7 @@ export function ForkModal({ idea, isOpen, onClose, onForkCreated }: ForkModalPro
         <div className="rounded-2xl bg-zinc-50 border border-zinc-200/80 p-4 space-y-1.5">
           <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 uppercase tracking-wider font-semibold">
             <span>UPSTREAM ANCESTOR</span>
-            <span>{idea.category.toUpperCase()} // {idea.difficulty}</span>
+            <span>{idea.category.toUpperCase()} {"//"} {idea.difficulty}</span>
           </div>
           <div className="text-sm font-semibold text-[#111113] line-clamp-1">{idea.title}</div>
           <p className="text-xs text-[#52525B] line-clamp-2 leading-relaxed">{idea.hook}</p>

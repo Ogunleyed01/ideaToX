@@ -29,6 +29,7 @@ import {
   Mail,
   MessageSquare,
   Bookmark,
+  LogOut,
 } from "lucide-react";
 import {
   getUserProfile,
@@ -37,6 +38,7 @@ import {
   getSavedBookmarks,
   subscribeBookmarks,
 } from "@/lib/ideas";
+import { useAuth } from "@/components/auth-provider";
 import { UserProfileData, Idea } from "@/types/idea";
 import { IdeaCard } from "@/components/idea-card";
 import { ForkModal } from "@/components/fork-modal";
@@ -46,6 +48,7 @@ function UserProfileContent() {
   const params = useParams();
   const rawUsername = params?.username as string;
   const username = rawUsername ? decodeURIComponent(rawUsername) : "";
+  const { user, profile: authProfile, isConfigured, signOut } = useAuth();
 
   const [profile, setProfile] = useState<UserProfileData | null>(null);
   const [savedIdeas, setSavedIdeas] = useState<Idea[]>([]);
@@ -58,13 +61,14 @@ function UserProfileContent() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    let active = true;
     async function loadProfile() {
       if (!username) return;
-      setLoading(true);
       const [data, allIdeas] = await Promise.all([
         getUserProfile(username),
         getAllIdeas(),
       ]);
+      if (!active) return;
       setProfile(data);
       const savedSlugs = getSavedBookmarks();
       setSavedIdeas(
@@ -72,22 +76,34 @@ function UserProfileContent() {
       );
       setLoading(false);
     }
-    loadProfile();
+    void loadProfile();
     const unsubProfile = subscribeProfileUpdates(() => {
-      loadProfile();
+      void loadProfile();
     });
     const unsubBookmarks = subscribeBookmarks(async () => {
       const savedSlugs = getSavedBookmarks();
       const allIdeas = await getAllIdeas();
+      if (!active) return;
       setSavedIdeas(
         (allIdeas || []).filter((i) => savedSlugs.includes(i.slug.toLowerCase()))
       );
     });
     return () => {
+      active = false;
       unsubProfile();
       unsubBookmarks();
     };
   }, [username]);
+
+  const isOwnProfile = Boolean(
+    isConfigured
+      ? user &&
+          ((profile?.author.id && profile.author.id === user.id) ||
+            (authProfile?.username &&
+              profile?.author.username &&
+              authProfile.username.toLowerCase() === profile.author.username.toLowerCase()))
+      : username.toLowerCase() === "you_builder"
+  );
 
   const handleShare = () => {
     if (typeof window !== "undefined") {
@@ -159,13 +175,28 @@ function UserProfileContent() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            href="/settings"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm"
-          >
-            <Settings className="w-3.5 h-3.5 text-zinc-500" />
-            <span className="hidden sm:inline">EDIT PROFILE</span>
-          </Link>
+          {isOwnProfile && (
+            <>
+              <Link
+                href="/settings"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 text-xs font-mono font-medium transition-colors shadow-sm"
+              >
+                <Settings className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="hidden sm:inline">EDIT PROFILE</span>
+              </Link>
+
+              {isConfigured && (
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-rose-50 text-zinc-700 hover:text-rose-700 border border-zinc-200 hover:border-rose-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">SIGN OUT</span>
+                </button>
+              )}
+            </>
+          )}
 
           <button
             type="button"
@@ -454,7 +485,9 @@ function UserProfileContent() {
               { id: "forks", label: "Remixes & Forks", icon: GitFork, count: forks.length },
               { id: "builds", label: "Shipped Builds", icon: Rocket, count: builds.length },
               { id: "starred", label: "Starred Specs", icon: Star, count: starred.length },
-              { id: "saved", label: "Reading List", icon: Bookmark, count: savedIdeas.length },
+              ...(isOwnProfile
+                ? [{ id: "saved", label: "Reading List", icon: Bookmark, count: savedIdeas.length }]
+                : []),
               { id: "reputation", label: "Reputation & Badges", icon: Award, count: stats.reputation },
             ].map((tab) => {
               const active = activeTab === tab.id;
@@ -692,7 +725,7 @@ function UserProfileContent() {
           )}
 
           {/* TAB: SAVED READING LIST (WANT TO BUILD) */}
-          {activeTab === "saved" && (
+          {isOwnProfile && activeTab === "saved" && (
             <div className="space-y-6">
               {savedIdeas.length === 0 ? (
                 <div className="bento-white p-12 text-center space-y-4">
