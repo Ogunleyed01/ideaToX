@@ -15,7 +15,6 @@ import {
   Calendar,
   ExternalLink,
   Code2,
-  Copy,
   Check,
   Share2,
   AlertCircle,
@@ -23,7 +22,6 @@ import {
   Terminal,
   Award,
   Layers,
-  CheckCircle2,
   ArrowRight,
   Settings,
   Mail,
@@ -59,6 +57,8 @@ function UserProfileContent() {
   // Interaction toasts
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [dismissSetupPrompt, setDismissSetupPrompt] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -104,6 +104,27 @@ function UserProfileContent() {
               authProfile.username.toLowerCase() === profile.author.username.toLowerCase()))
       : username.toLowerCase() === "you_builder"
   );
+
+  const isDefaultProfile = Boolean(
+    isOwnProfile &&
+      profile?.author &&
+      (!profile.author.headline ||
+        profile.author.headline === "Full-Stack Systems Builder" ||
+        profile.author.bio === "Open-source systems builder & software architect on IdeaToX." ||
+        !profile.author.preferred_stack ||
+        profile.author.preferred_stack.length === 0 ||
+        /^[a-zA-Z0-9]+_[0-9a-f]{4}$/.test(profile.author.username))
+  );
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+    } catch (err) {
+      console.error("Sign-out error:", err);
+      setIsSigningOut(false);
+    }
+  };
 
   const handleShare = () => {
     if (typeof window !== "undefined") {
@@ -188,11 +209,15 @@ function UserProfileContent() {
               {isConfigured && (
                 <button
                   type="button"
-                  onClick={() => void signOut()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-rose-50 text-zinc-700 hover:text-rose-700 border border-zinc-200 hover:border-rose-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer"
+                  disabled={isSigningOut}
+                  onClick={() => void handleSignOut()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-rose-50 text-zinc-700 hover:text-rose-700 border border-zinc-200 hover:border-rose-200 text-xs font-mono font-medium transition-colors shadow-sm cursor-pointer disabled:opacity-60"
+                  title="Sign out of IdeaToX"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">SIGN OUT</span>
+                  <LogOut className={`w-3.5 h-3.5 ${isSigningOut ? "animate-spin text-rose-600" : ""}`} />
+                  <span className="hidden sm:inline">
+                    {isSigningOut ? "SIGNING OUT..." : "SIGN OUT"}
+                  </span>
                 </button>
               )}
             </>
@@ -221,6 +246,52 @@ function UserProfileContent() {
           PROFILE HERO BANNER & IDENTITY
          ========================================================================= */}
       <main className="w-full max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 flex-1 space-y-10">
+        {/* Onboarding Profile Setup Prompt */}
+        {isOwnProfile && isDefaultProfile && !dismissSetupPrompt && (
+          <aside
+            aria-label="Profile setup reminder"
+            className="relative rounded-2xl bg-amber-50/90 border border-amber-300/80 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-700 mt-0.5">
+                <Sparkles className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                    ACTION RECOMMENDED
+                  </span>
+                  <h2 className="text-sm font-semibold text-zinc-900 font-sans">
+                    Complete your Architect Profile
+                  </h2>
+                </div>
+                <p className="text-xs text-zinc-600 max-w-2xl leading-relaxed">
+                  Your profile is currently using default placeholders (@{author.username}, &ldquo;Full-Stack Systems Builder&rdquo;). Personalize your headline, bio, preferred tech stack, and social channels so builders and founders can discover and collaborate with you.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 pl-13 sm:pl-0">
+              <Link
+                href="/settings?setup=profile&welcome=true"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#111113] hover:bg-zinc-800 text-white text-xs font-mono font-semibold transition-all shadow-sm"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-300" />
+                <span>Customize Profile</span>
+                <ArrowRight className="w-3.5 h-3.5 text-zinc-400" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setDismissSetupPrompt(true)}
+                className="px-3 py-2 rounded-full text-zinc-500 hover:text-zinc-800 text-xs font-mono transition-colors cursor-pointer"
+                title="Dismiss reminder"
+              >
+                Dismiss
+              </button>
+            </div>
+          </aside>
+        )}
+
         <section className="relative rounded-[28px] bg-white border border-zinc-200/90 p-6 sm:p-10 shadow-[0_24px_60px_-15px_rgba(0,0,0,0.06)] overflow-hidden">
           {/* Subtle Dual Aurora Background Glow */}
           <div

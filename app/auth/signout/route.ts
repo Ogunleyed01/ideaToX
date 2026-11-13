@@ -7,3 +7,11 @@ export async function POST(request: Request) {
   await supabase.auth.signOut();
   return NextResponse.redirect(`${origin}/`, { status: 302 });
 }
+
+export async function GET(request: Request) {
+  const { origin } = new URL(request.url);
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  return NextResponse.redirect(`${origin}/`, { status: 302 });
+}
+

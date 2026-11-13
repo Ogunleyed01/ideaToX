@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Save,
   RotateCcw,
@@ -88,8 +88,13 @@ const AVATAR_PRESETS = [
   "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80",
 ];
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isSetupMode =
+    searchParams.get("setup") === "profile" ||
+    searchParams.get("welcome") === "true";
+
   const {
     user,
     profile: authProfile,
@@ -106,6 +111,18 @@ export default function SettingsPage() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [customTag, setCustomTag] = useState("");
   const [usernameInput, setUsernameInput] = useState("you_builder");
+  const [dismissSetupNotice, setDismissSetupNotice] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await signOut();
+    } catch (err) {
+      console.error("Sign-out error:", err);
+      setIsSigningOut(false);
+    }
+  };
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -351,6 +368,43 @@ export default function SettingsPage() {
             </Link>
           </div>
         </div>
+
+        {/* New Account First-Time Profile Setup Banner */}
+        {isSetupMode && !dismissSetupNotice && (
+          <aside
+            aria-label="Welcome new account setup"
+            className="mb-8 rounded-2xl bg-amber-50/90 border border-amber-300 p-5 sm:p-6 shadow-sm relative overflow-hidden"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center shrink-0 text-amber-700 mt-0.5">
+                  <Sparkles className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-mono text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full bg-amber-200/80 text-amber-900">
+                      WELCOME NEW ARCHITECT
+                    </span>
+                    <h2 className="text-base font-semibold text-zinc-900 font-sans">
+                      Setup your Architect Profile &amp; Preferences
+                    </h2>
+                  </div>
+                  <p className="text-xs sm:text-sm text-zinc-600 max-w-2xl leading-relaxed mt-1">
+                    Your account has been initialized with default placeholders. Take 30 seconds to choose your public @handle, engineering headline, bio, and preferred stack below so other builders and founders can discover and collaborate with you.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDismissSetupNotice(true)}
+                className="text-zinc-400 hover:text-zinc-700 p-1.5 rounded-lg transition-colors cursor-pointer"
+                title="Dismiss welcome message"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </aside>
+        )}
 
         {/* Save Status Toast Banner */}
         {savedNotice && (
@@ -961,11 +1015,12 @@ export default function SettingsPage() {
 
                     <button
                       type="button"
-                      onClick={() => void signOut()}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-mono font-semibold transition-colors cursor-pointer"
+                      disabled={isSigningOut}
+                      onClick={() => void handleSignOut()}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-700 border border-rose-200 text-xs font-mono font-semibold transition-colors cursor-pointer"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Sign Out of IdeaToX</span>
+                      <LogOut className={`w-3.5 h-3.5 ${isSigningOut ? "animate-spin text-rose-600" : ""}`} />
+                      <span>{isSigningOut ? "Signing Out..." : "Sign Out of IdeaToX"}</span>
                     </button>
                   </div>
                 </section>
@@ -998,5 +1053,22 @@ export default function SettingsPage() {
 
       <ObsidianMegaFooter />
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-zinc-600 font-mono text-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
+            <span>LOADING BUILDER TELEMETRY SETTINGS...</span>
+          </div>
+        </div>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
   );
 }

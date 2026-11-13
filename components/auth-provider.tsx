@@ -7,7 +7,6 @@ import React, {
   useEffect,
   useCallback,
 } from "react";
-import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import type { ProfileRow } from "@/types/database";
 import {
@@ -44,7 +43,6 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const isConfigured = isSupabaseConfigured();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -152,10 +150,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // ignore network errors during signout cleanup
       }
+      try {
+        await fetch("/auth/signout", { method: "POST" });
+      } catch {
+        // ignore server route fetch errors during signout
+      }
     }
     await syncUserState(null);
-    router.refresh();
-  }, [isConfigured, router, syncUserState]);
+    if (typeof window !== "undefined") {
+      window.location.assign(window.location.origin + "/");
+    }
+  }, [isConfigured, syncUserState]);
 
   return (
     <AuthContext.Provider

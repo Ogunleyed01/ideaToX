@@ -111,14 +111,17 @@ export function AuthPassportForm({
     return `${origin}/auth/callback?next=${encodeURIComponent(safeNext)}`;
   };
 
-  const completeSignInNavigation = () => {
-    const target = sanitizeSafeNext(nextPath);
+  const completeSignInNavigation = (isNewUser?: boolean) => {
+    let target = sanitizeSafeNext(nextPath);
+    if (isNewUser && (target === "/profile" || target === "/")) {
+      target = "/settings?setup=profile&welcome=true";
+    }
     if (onSuccess) {
       onSuccess();
     }
     if (variant === "page") {
       router.replace(target);
-    } else if (nextPath) {
+    } else if (target) {
       router.push(target);
     }
     router.refresh();
@@ -204,7 +207,7 @@ export function AuthPassportForm({
 
       if (data.session && data.user) {
         await ensureProfileExists(data.user);
-        completeSignInNavigation();
+        completeSignInNavigation(true);
       } else {
         setSuccessNotice(
           `Confirmation link dispatched to ${email.trim()}. Open the email to activate @${derivedHandle} and finish signing in.`

@@ -123,7 +123,19 @@ export async function GET(request: Request) {
       if (data?.user) {
         await ensureProfileExists(data.user);
       }
-      return redirectResponse;
+      const isNewUser =
+        Boolean(data?.user?.created_at) &&
+        Date.now() - new Date(data!.user!.created_at).getTime() < 120000;
+      const targetDest =
+        type === "recovery"
+          ? "/auth?mode=reset-password"
+          : isNewUser && (safeNext === "/profile" || safeNext === "/")
+            ? "/settings?setup=profile&welcome=true"
+            : safeNext;
+      const finalRedirectUrl = buildRedirectUrl(request, origin, targetDest);
+      const finalResponse = NextResponse.redirect(finalRedirectUrl);
+      redirectResponse.cookies.getAll().forEach((c) => finalResponse.cookies.set(c));
+      return finalResponse;
     }
     return NextResponse.redirect(
       buildRedirectUrl(
@@ -143,7 +155,19 @@ export async function GET(request: Request) {
       if (data?.user) {
         await ensureProfileExists(data.user);
       }
-      return redirectResponse;
+      const isNewUser =
+        Boolean(data?.user?.created_at) &&
+        Date.now() - new Date(data!.user!.created_at).getTime() < 120000;
+      const targetDest =
+        type === "recovery"
+          ? "/auth?mode=reset-password"
+          : isNewUser && (safeNext === "/profile" || safeNext === "/")
+            ? "/settings?setup=profile&welcome=true"
+            : safeNext;
+      const finalRedirectUrl = buildRedirectUrl(request, origin, targetDest);
+      const finalResponse = NextResponse.redirect(finalRedirectUrl);
+      redirectResponse.cookies.getAll().forEach((c) => finalResponse.cookies.set(c));
+      return finalResponse;
     }
     return NextResponse.redirect(
       buildRedirectUrl(
