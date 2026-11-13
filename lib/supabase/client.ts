@@ -25,7 +25,13 @@ export function createClient() {
   const supabaseAnonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder-anon-key";
 
-  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
+  return createBrowserClient<Database>(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: {
+      sameSite: "lax",
+      secure: typeof window !== "undefined" ? window.location.protocol === "https:" : false,
+      path: "/",
+    },
+  });
 }
 
 export function sanitizeUsernameHandle(raw: string): string {
